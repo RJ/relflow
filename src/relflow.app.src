@@ -1,0 +1,6 @@
+{application, relflow,
+ [{description, "Appup generator version bumper workflow tool"},
+  {vsn, "0.1.0"},
+  {modules, []},
+  {registered, []},
+  {applications, [kernel, stdlib, getopt]}]}.
