@@ -8,9 +8,9 @@ Automatically..
 
 It's intended to work alongside ````relx````.
 
-__WARNING__ relflow modifies .app, .app.src, .appup, and relx.config
-files in-place. Make sure you have committed all local modifications to
-git before running relflow.
+__WARNING__ relflow modifies ````.app````, ````.app.src````,
+````.appup````, and ````relx.config```` files in-place.
+Make sure you have committed all local modifications to git before running relflow.
 
 ## Workflow Example
 
@@ -38,12 +38,15 @@ and at no point did you have to mess around incrementing versions of
 apps and releases or write the appup files (just review the auto-genned
 ones, and possibly edit if needed).
 
+Relflow guesses whether to do a minor or patch bump of version numbers,
+depending on severity of modifications. TODO: make this configurable.
+
 Next step is to turn that into debs using the as-yet unreleased new
 tool, or just append "tar" to the relx command to deploy with tarball.
 
 ## relflow --help
 
-Relflow will guess everything, unless you specific with a command-line
+Relflow will guess everything, unless you specify with a command-line
 option.
 
 | Short | Long         | Type    | Description                                            |
