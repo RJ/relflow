@@ -91,7 +91,16 @@ fix_state(S=#state{relname=undefined,relxfile=RP}) when RP =/= undefined ->
             error
     end;
 fix_state(S=#state{relname=RN, relpath="_rel/$relname"}) when is_list(RN) ->
-    fix_state(S#state{relpath="_rel/"++RN});
+    %% TODO we could read relx.config instead of assuming _rel
+    RP = "_rel/"++RN,
+    case ec_file:exists(RP) of
+       true ->
+           ?WARN("Assuming '--relpath ~s' (relx default)", [RP]),
+           fix_state(S#state{relpath=RP});
+       false ->
+           ?ERROR("Can't guess --relpath, tried: ~s", [RP]),
+           error
+   end;
 fix_state(S=#state{upfrom=undefined,relpath=RP}) ->
     %% get upfrom from RELEASES file
     Path = RP ++ "/releases/RELEASES",
