@@ -38,6 +38,21 @@ ones, and possibly edit if needed).
 Next step is to turn that into debs using the as-yet unreleased new
 tool, or just append "tar" to the relx command to deploy with tarball.
 
+## relflow --help
+
+Relflow will guess everything, unless you specific with a command-line
+option.
+
+| Short | Long         | Type    | Description                                            |
+|:-----:|:------------:|:-------:|--------------------------------------------------------|
+| -n    | --relname    | string  | Release name, guessed from relx.config                 |
+| -p    | --relpath    | string  | Release dir, defaults to ./_rel/$relname               |
+| -u    | --upfrom     | string  | Previous release version, guessed from RELEASES file   |
+| -r    | --relxfile   | string  | Path of relx.config, defaults to ./relx.config         |
+| -l    | --loglevel   | string  | Log level: debug,info,warn,error(default: info)        |
+| -v    | --version    |         | Print relflow version                                  |
+| -h    | --help       |         | Print usage message                                    |
+
 
 ## Build and install
 

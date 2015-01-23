@@ -39,7 +39,7 @@ opt_specs() ->
 
      {help, $h, "help", undefined,
       "Print usage message"},
-     {version, undefined, "version", undefined,
+     {version, $v, "version", undefined,
       "Print relflow version"}
     ].
 
@@ -138,7 +138,7 @@ show_version() ->
 
 show_usage() ->
     getopt:usage(opt_specs(), "relflow", "<options..>"),
-    io:format("Example: relflow -n myrelease -p _rel/myrelease -u 1.0 -v 2.0\n\n").
+    io:format("Example: relflow -n myrelease -u 1.0\n\n").
 
 get_current_vsn_from_RELEASES(F) ->
     {ok, [L]} = file:consult(F),
