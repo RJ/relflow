@@ -6,8 +6,11 @@ Automatically..
 * increments vsn field in .app and .app.src files
 * updates relx.config with new release info
 
-It's intended to work alongside ````relx````, since it expects to find
-your previous release under ````./_rel/$relname````
+It's intended to work alongside ````relx````.
+
+__WARNING__ relflow modifies .app, .app.src, .appup, and relx.config
+files in-place. Make sure you have committed all local modifications to
+git before running relflow.
 
 ## Workflow Example
 
