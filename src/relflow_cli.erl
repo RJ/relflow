@@ -58,17 +58,17 @@ opts2state(Opts, _NonOpts, InitialState = #state{}) ->
 
 opt2state([], State) ->
     State;
-opt2state([{relxfile, F} | Opts], State) ->
-    case ec_file:exists(F) of
-        true ->
-            opt2state(Opts, State#state{relxfile=F});
-        false ->
-            ?ERROR("Could not read relx file at: ~s", [F]),
-            error
-    end;
 opt2state([{loglevel, L} | Opts], State) ->
     NewState = State#state{loglevel=L},
     opt2state(Opts, NewState);
+opt2state([{relxfile, F}|Opts], State) ->
+    case ec_file:exists(F) of
+        false ->
+            ?ERROR("Can't read relx.config: ~s",[F]),
+            error;
+        true ->
+            opt2state(Opts, State#state{relxfile=F})
+    end;
 opt2state([{relname, N} | Opts], State) ->
     opt2state(Opts, State#state{relname=N});
 opt2state([{relpath, P} | Opts], State) ->
@@ -78,7 +78,18 @@ opt2state([{upfrom, U} | Opts], State) ->
 %opt2state([{relvsn, V} | Opts], State) ->
     %opt2state(Opts, State#state{relvsn=V}).
 
-%% TODO read defaults from relx.config?
+fix_state(S=#state{relname=undefined,relxfile=RP}) when RP =/= undefined ->
+    case guess_relname_from_relx(RP) of
+        {ok, Relname} ->
+            ?WARN("Assuming '--relname ~s' (extracted from ~s)",[Relname,RP]),
+            fix_state(S#state{relname=atom_to_list(Relname)});
+        {error, undefined} ->
+            ?ERROR("Can't guess --relname, no {release, ...} section in relx.config",[]),
+            error;
+        {error, {ambiguous,Names}} ->
+            ?ERROR("Can't guess --relname, multiple release names found in relx.config: ~w",[Names]),
+            error
+    end;
 fix_state(S=#state{relname=RN, relpath="_rel/$relname"}) when is_list(RN) ->
     fix_state(S#state{relpath="_rel/"++RN});
 fix_state(S=#state{upfrom=undefined,relpath=RP}) ->
@@ -88,8 +99,7 @@ fix_state(S=#state{upfrom=undefined,relpath=RP}) ->
         true ->
             Vsn = get_current_vsn_from_RELEASES(Path),
             true = is_list(Vsn),
-            ?WARN("No previous release version specified (with --upfrom)",[]),
-            ?WARN("Assuming --upfrom ~s (extracted from ~s)",[Vsn,Path]),
+            ?WARN("Assuming '--upfrom ~s' (extracted from ~s)",[Vsn,Path]),
             fix_state(S#state{upfrom=Vsn});
         false ->
             ?ERROR("Previous release version missing, specify with --upfrom",[]),
@@ -125,3 +135,14 @@ get_current_vsn_from_RELEASES(F) ->
     {ok, [L]} = file:consult(F),
     [{release,_RelName,Vsn,_ErtsVsn,_Apps,permanent}] = lists:filter(fun({_,_,_,_,_,permanent}) -> true; (_) -> false end, L),
     Vsn.
+
+guess_relname_from_relx(RP) ->
+    {ok,L} = file:consult(RP),
+    Rels = lists:filter(fun(T) ->
+                is_tuple(T) andalso element(1,T) == release
+            end, L),
+    case lists:usort(lists:map(fun(T) -> element(1,element(2,T)) end, Rels)) of
+        [Relname] -> {ok, Relname};
+        [] -> {error, undefined};
+        L -> {error, {ambiguous, L}}
+    end.
