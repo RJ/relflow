@@ -18,7 +18,7 @@ Your last deployed release was versioned "1.0.0", and as such you have a
 You make some changes to various ````.erl```` files, run ````rebar
 compile````, test, and are ready to create+deploy the release.
 
-    $ relflow -u 1.0.0 -n $relname --appups
+    $ relflow -u 1.0.0 -n $relname
 
 This will figure out which app versions to increment, do so by modifying
 the relevant .app and .app.src files in-place, write out appropriate

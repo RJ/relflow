@@ -3,94 +3,65 @@
 -export([main/1]).
 -include("relflow.hrl").
 -record(app, {name, vsn, src, ebin, mods=[]}).
--record(release, {name, vsn, apps=[]}).
-
--define(otp_apps, [
-    asn1, common_test, compiler, cosEvent, cosEventDomain, cosFileTransfer,
-    cosNotification, cosProperty, cosTime, cosTransactions, crypto, debugger,
-    dialyzer, diameter, edoc, eldap, erl_docgen, erl_interface, erts, et,
-    eunit, gs, hipe, ic, inets, jinterface, kernel, megaco, mnesia, observer,
-    odbc, orber, os_mon, ose, otp_mibs, parsetools, percept, public_key,
-    reltool, runtime_tools, sasl, snmp, ssh, ssl, stdlib, syntax_tools,
-    test_server, tools, typer, webtool, wx, xmerl
-]).
-
-%% Design notes:
-%% 1) Construct two #releases{} containing a list of #app{} each
-%% 2) Compare apps from the two releases, and generate .appups
-%% 3) Profit.
+%-record(release, {name, vsn, apps=[]}).
 
 main(Args) ->
-    case relflow_cli:parse_args(Args) of
-        {ok, State = #state{}} -> run(State);
-        _ -> init:stop(1)
+    application:load(relflow),
+    InitialState = #state{},
+    relflow_log:init(relflow, "info"),
+    case relflow_cli:parse_args(Args, InitialState) of
+        {ok, State = #state{}} ->
+            %?INFO("STATE: ~p",[State]),
+            relflow_log:init(relflow, State#state.loglevel),
+            try run(State) of
+                _ -> ok
+            catch
+                throw:Thrown ->
+                    ?ERROR("Uncaught error: ~p\n",[Thrown]),
+                    erlang:halt(1)
+            end;
+        _ ->
+            erlang:halt(1)
     end.
-
-%-record(state, {
-        %relname
-    %,   relpath
-    %,   upfrom
-    %,   relvsn
-%}).
-
-stderr(S) -> stderr(S,[]).
-stderr(S,A) -> io:put_chars(standard_error, [io_lib:format(S,A),"\n"]).
 
 run(State = #state{}) ->
-    %io:format("# RUN ~p~n",[State]),
     try
-        run_directives(State#state.directives, State)
+        do_appups(State)
     catch
         throw:{err, S, A} ->
-            stderr(S,A),
+            ?ERROR(S,A),
             init:stop(1)
-    end.
-
-run_directives([], State) ->
-    State;
-
-run_directives([appups|Directives], State) ->
-    NewState = do_appups(State),
-    run_directives(Directives, NewState);
-
-run_directives([listrels|Directives], State) ->
-    Rels = list_releases(State),
-    %io:format("~p\n",[Rels]),
-    run_directives(Directives, State).
-
-list_releases(#state{relpath=Relpath}) ->
-    Dir = Relpath ++ "/releases/",
-    case file:list_dir("_rel/relsandbox/releases") of
-        {ok, Files} ->
-            lists:reverse(lists:foldl(fun(F, Acc) ->
-                Path = Dir ++ F,
-                case filelib:is_dir(Path) of
-                    true -> [{F, Path}|Acc];
-                    false -> Acc
-                end
-            end, [], Files));
-        {error, _Err} ->
-            throw({err, "No releases dir found @ ~s", [Dir]})
     end.
 
 get_oldrel_info(State=#state{upfrom=OldV,relname=RelName}) ->
     OldRelPath = filename:join([State#state.relpath,"releases",OldV, RelName ++ ".rel"]),
-    %io:format("oldrelpath: ~s\n",[OldRelPath]),
+    ?DEBUG("upfrom release relfile: ~s",[OldRelPath]),
     FilterFun = fun(_) -> true end,
-    {RelName, OldVsn, OldApps} = parse_rel_file(OldRelPath, "_rel/"++RelName++"/lib", FilterFun),
-    {OldVsn, OldApps}.
-
+    case ec_file:exists(OldRelPath) of
+        true ->
+            {RelName, OldVsn, OldApps} = parse_rel_file(OldRelPath, "_rel/"++RelName++"/lib", FilterFun),
+            {ok, OldVsn, OldApps};
+        false ->
+            {error, rel_not_found}
+    end.
 
 do_appups(State = #state{}) ->
-    {OldVsn, AllOldApps} = get_oldrel_info(State),
-    %io:format("OLD vsn: ~p apps: ~p\n",[OldVsn, AllOldApps]),
+    case get_oldrel_info(State) of
+        {ok, OldVsn, AllOldApps} ->
+            do_appups_1(State, OldVsn, AllOldApps);
+        {error, rel_not_found} ->
+            ?ERROR("Can't find upfrom release vsn ~s",[State#state.upfrom]),
+            erlang:halt(1)
+    end.
+
+do_appups_1(State, OldVsn, AllOldApps) ->
+    ?DEBUG("upfrom release vsn: ~p apps: ~p",[OldVsn, AllOldApps]),
     %% based on old release, find the local paths to the apps from the old rel
     %% and then check if any of the modules are new/changed, so we can generate
     %% appups.
     %% Apps will either be in deps/ or src,ebin or apps/*/src,ebin
     AllCurrentApps = parse_local_appvers(["ebin", "apps", "deps"]),
-    %io:format("NEW apps (all): ~p\n",[AllCurrentApps]),
-
+    ?DEBUG("new release apps: ~p",[AllCurrentApps]),
     %% since we dont need appup instructions for added/removed apps, just find
     %% the list of new apps that also are in the old release, for diffing.
     %% we want a list of [ {OldApp, NewApp}, ... ]
@@ -102,37 +73,54 @@ do_appups(State = #state{}) ->
             end
         end, [], AllOldApps),
 
-    %io:format("Apps to diff: ~p\n",[AppPairs]),
+    %?DEBUG("Apps to diff: ~p",[AppPairs]),
     AppPlans = lists:map(fun(Pair={OApp,NApp}) ->
         Plan = make_appup(Pair),
         {OApp,NApp,Plan}
     end, AppPairs),
+    ActionablePlans = filter_actionable_plans(AppPlans),
+    ?DEBUG("App Plans (~B): ~p",[length(ActionablePlans),ActionablePlans]),
+    case ActionablePlans of
+        [] ->
+            ?INFO("No changed apps detected. Nothing to do.",[]),
+            erlang:halt(0);
+        _ ->
+            maybe_exec_plans(State, ActionablePlans)
+    end.
 
-    %io:format("APPPLANS:~p\n",[AppPlans]),
+filter_actionable_plans(Plans) ->
+    lists:filter(fun({_,_,not_upgraded}) -> false; (_) -> true end, Plans).
+
+maybe_exec_plans(State, AppPlans) ->
     print_app_plans(AppPlans),
-    case prompt_yn("Write .appup(s) and bump versions?", true) of
+    case relflow_utils:prompt_yn("Write .appup(s) and bump versions?", true) of
         true ->
-            process_app_plans(AppPlans),
-            RelxFile = "./relx.config",
-            {ok, NewRelVsn} = relflow_vsn:bump_relx_vsn(RelxFile, list_to_atom(State#state.relname), State#state.upfrom),
-            State;
+            exec_plans(State, AppPlans);
         false ->
             State
     end.
 
-process_app_plans(L) ->
-    [ process_app_plan(D) || D <- L ].
+exec_plans(State, AppPlans) ->
+    State2 = process_app_plans(AppPlans, State),
+    RelxFile = State2#state.relxfile,
+    {ok, NewRelVsn} = relflow_vsn:bump_relx_vsn(RelxFile, list_to_atom(State2#state.relname), State2#state.upfrom),
+    ?INFO("New release version: ~s", [NewRelVsn]),
+    State2.
 
-process_app_plan({_OApp, _NApp=#app{name=Appname,vsn=Vsn}, not_upgraded}) ->
-    io:format("App '~s' version '~s' - not upgraded, no changes needed.~n",[Appname, Vsn]);
+process_app_plans(L, State) ->
+    lists:foldl(fun process_app_plan/2, State, L).
 
-process_app_plan({OApp,NApp,{needs_version_bump, UpInstructions, Level}}) when is_atom(Level) ->
+process_app_plan({_OApp, _NApp=#app{name=Appname,vsn=Vsn}, not_upgraded}, State) ->
+    ?DEBUG("app: ~s-~s unchanged",[Appname, Vsn]),
+    State;
+
+process_app_plan({OApp,NApp,{needs_version_bump, UpInstructions, Level}}, State) when is_atom(Level) ->
     %% we know we need to dump the app vsn at this point.
-    #app{name=Appname,vsn=CurrVsn} = OApp,
-    io:format("App '~s' version '~s' - changes detected, needs version bump.~n",[Appname, CurrVsn]),
+    #app{name=AppName,vsn=CurrVsn} = OApp,
     AppSrcFile = NApp#app.src  ++ "/" ++ atom_to_list(NApp#app.name) ++ ".app.src",
     AppFile    = NApp#app.ebin ++ "/" ++ atom_to_list(NApp#app.name) ++ ".app",
     {ok, CurrVsn, NewVsn} = relflow_vsn:bump_dot_apps(AppSrcFile, AppFile, Level),
+    ?INFO("app: ~s-~s\t  --[~s bump]-->\t  ~s-~s",[AppName, CurrVsn, Level, AppName, NewVsn]),
     DownInstructions = reverse_appup_instructions(UpInstructions),
     AppUpTerm = {NewVsn,
                  [{CurrVsn, UpInstructions}],
@@ -141,37 +129,18 @@ process_app_plan({OApp,NApp,{needs_version_bump, UpInstructions, Level}}) when i
     AppUpPath = NApp#app.ebin ++ "/" ++ atom_to_list(NApp#app.name) ++ ".appup",
     %% TODO what if this vsn->vsn upgrade term exists in appup already
     ok = file:write_file(AppUpPath, io_lib:format("~p.\n\n",[AppUpTerm])),
-    io:format("Wrote ~s\n",[AppUpPath]),
-    ok.
-
-%process_app_plan({N, Va, Vb, _App, {appup, Path, Contents}}) ->
-    %io:format("~s.appup generated for ~s --> ~s~n",[N, Va, Vb]),
-    %io:format("~p~n", [Contents]),
-    %case filelib:is_file(Path) of
-        %true ->
-            %{ok, Terms} = file:consult(Path),
-            %case lists:member(Contents, Terms) of
-                %true ->
-                    %io:format("Identical directive already in file.~n");
-                %false ->
-                    %NewContents = prep_appfile_contents([ 
-                            %Contents | remove_appup(Terms, Va, Vb) ]),
-                    %ok = file:write_file(Path, NewContents),
-                    %io:format("Wrote: ~s~n", [Path])
-            %end;
-        %false ->
-            %ok = file:write_file(Path, prep_appfile_contents([Contents]))
-    %end.
+    ?INFO("Wrote ~s.appup: ~s",[AppName, AppUpPath]),
+    State.
 
 print_app_plans(Plans) ->
     lists:foreach(
-        fun ({OApp, App, not_upgraded}) ->
-                io:format("~20.. s    no change @ ~s\n",[App#app.name, App#app.vsn]);
-            ({OApp, App, {needs_version_bump,Instrs,Level}}) ->
+        fun ({_OApp, _App, not_upgraded}) ->
+                ok;
+            ({_OApp, App, {needs_version_bump,Instrs,Level}}) ->
                 NewVsn = relflow_vsn:bump_version(App#app.vsn, Level),
-                io:format("~20.. s    APPUP ~s -> ~s\n",[App#app.name, App#app.vsn, NewVsn]),
+                ?INFO("~s-~s\t ~s increase to ~s",[App#app.name, App#app.vsn, Level, NewVsn]),
                 lists:foreach(fun(Inst) ->
-                    io:format("                         * ~p\n",[Inst])
+                    ?DEBUG(" * ~p",[Inst])
                 end, Instrs)
         end, Plans).
 
@@ -250,43 +219,10 @@ reverse_appup_instruction({update, M, {advanced, [A,B]}}) -> {update, M, {advanc
 reverse_appup_instruction({apply, {M, sup_upgrade_notify, [A,B]}}) -> {apply, {M, sup_upgrade_notify, [B,A]}};
 reverse_appup_instruction(Other) -> Other.
 
-%% detect nature of change to a beam file
-beam_diff(PathA, PathB) when PathA == PathB ->
-    false;
-beam_diff(PathA, PathB) ->
-    {ok, BeamA} = file:read_file(PathA),
-    {ok, BeamB} = file:read_file(PathB),
-    case BeamA == BeamB of
-        true  -> false; %% same file contents
-        false -> beam_diff_type(BeamA, BeamB)
-    end.
-
-beam_diff_type(BeamA, BeamB) when is_binary(BeamA), is_binary(BeamB) ->
-    Minfo = extract_module_info(BeamB),
-    HasBehaviour = fun(B) ->
-        lists:member(B, proplists:get_value(behaviours, Minfo, []))
-    end,
-    HasCodeChange = lists:member({code_change, 3}, Minfo) orelse
-                        lists:member({code_change, 4}, Minfo),
-    case HasBehaviour(supervisor) of
-        true ->
-            {supervisor, Minfo};
-        false ->
-            case HasCodeChange of
-                true ->
-                    case did_state_record_change(BeamA, BeamB) of
-                        true  -> code_change;
-                        false -> load_module
-                    end;
-                false ->
-                    load_module
-            end
-    end.
-
 appup_instruction_for_module(M, OldApp, NewApp) ->
     OldBeamPath = filename:join([OldApp#app.ebin, atom_to_list(M) ++ ".beam"]),
     NewBeamPath = filename:join([NewApp#app.ebin, atom_to_list(M) ++ ".beam"]),
-    case beam_diff(OldBeamPath, NewBeamPath) of
+    case relflow_beamcmp:diff(OldBeamPath, NewBeamPath) of
         false ->
             [];
         load_module ->
@@ -300,7 +236,7 @@ appup_instruction_for_module(M, OldApp, NewApp) ->
 appup_for_code_change(M, OldApp, NewApp) ->
     [{update, M, {advanced, [OldApp#app.vsn, NewApp#app.vsn]}}].
 
-appup_for_supervisor(M, Minfo, OldApp, NewApp) ->
+appup_for_supervisor(M, Minfo, OldApp, _NewApp) ->
     I = {update, M, supervisor},
     %% Support the Dukes of Erl erlrc convention
     %% ie. call sup_upgrade_notify/2 if exported.
@@ -315,52 +251,14 @@ appup_for_supervisor(M, Minfo, OldApp, NewApp) ->
         false ->
             [I]
     end.
-
-
-read_beam_records(Beam) ->
-    AbstChunks = beam_lib:chunks(Beam,[abstract_code]),
-    {ok, {_ModName, [{abstract_code, {raw_abstract_v1, AC}}]}} = AbstChunks,
-    Recs = lists:foldl(fun
-        ({attribute,_Line,record,RecTuple={_RecName,_RecInfo}},Acc) ->
-            [RecTuple|Acc];
-        (_, Acc) ->
-            Acc
-    end, [], AC),
-    lists:sort(Recs).
-
-%% would be better to use the abstract code to detect the record name
-%% returned from init/1, ie {ok, #state{}}, and check if that has changed.
-%% but 99.9% of the time it's called 'state', so this will do for now.
-did_state_record_change(BeamA, BeamB) ->
-    proplists:get_value(state, read_beam_records(BeamA)) /=
-        proplists:get_value(state, read_beam_records(BeamB)).
-
-extract_module_info(Beam) ->
-    Chunker = fun(K) ->
-        case beam_lib:chunks(Beam, [K]) of
-            {ok, {_, [{K, Result}]}} -> Result;
-            _ -> []
-        end
-    end,
-    Exports = Chunker(exports),
-    %% Tidy up the americanised spelling of behaviour
-    Behaviours = lists:usort(
-                    lists:flatten(
-                        proplists:get_value(behaviour, Chunker(attributes), []) ++
-                        proplists:get_value(behavior,  Chunker(attributes), []))),
-    [
-        {behaviours, Behaviours},
-        {exports, Exports}
-    ].
-
 parse_app_file(Path) ->
     %io:format("parse_app_file ~s\n",[Path]),
     {ok, [{application, AppName, Sections}]} = file:consult(Path),
     Vsn = proplists:get_value(vsn, Sections),
     Mods = proplists:get_value(modules, Sections),
     PathParts = filename:split(Path),
-    EbinPath = absname(filename:join(lists:sublist(PathParts, length(PathParts)-1))),
-    SrcPath = absname(filename:join([EbinPath, "..", "src"])),
+    EbinPath = relflow_utils:absname(filename:join(lists:sublist(PathParts, length(PathParts)-1))),
+    SrcPath = relflow_utils:absname(filename:join([EbinPath, "..", "src"])),
     #app{name=AppName, vsn=Vsn, src=SrcPath, ebin=EbinPath, mods=Mods}.
 
 parse_rel_file(Path, LibsDir, FilterFun) ->
@@ -368,7 +266,7 @@ parse_rel_file(Path, LibsDir, FilterFun) ->
     {release, {RelName, RelVsn}, {erts, _ErtsVsn}, AppVers} = Term,
     %% filter out the OTP-provided apps:
     AppFiles = lists:foldl(fun({AppNameA,AppVer}, Acc) ->
-        case lists:member(AppNameA, ?otp_apps) of
+        case lists:member(AppNameA, relflow_utils:otp_app_names()) of
             true -> Acc;
             false ->
                 AppName = atom_to_list(AppNameA),
@@ -376,7 +274,7 @@ parse_rel_file(Path, LibsDir, FilterFun) ->
                 [AppFile | Acc]
         end
     end, [], AppVers),
-    %io:format("APPFILES: ~p\n",[AppFiles]),
+    ?DEBUG("Appfiles: ~p",[AppFiles]),
     Apps0 = [ parse_app_file(F) || F <- AppFiles ],
     Apps = lists:filter(fun(#app{name=Name}) ->
         FilterFun(atom_to_list(Name))
@@ -403,37 +301,3 @@ remove_appup(Terms, Va, Vb) ->
                  Terms).
 
 
-%% via http://www.codecodex.com/wiki/Determine_if_two_file_paths_refer_to_the_same_file
-%% hope it works properly..
-absname(Path) ->
-    Path2 = filename:split(Path),
-    case string:chr(hd(Path2), $/) of
-        0 -> {ok, Cwd} = file:get_cwd(),
-             Abs = lists:reverse(filename:split(Cwd)),
-             absname(Path2, Abs);
-        _ -> absname(Path2, [])
-    end.
-
-absname([], Absname) ->
-    filename:join(lists:reverse(Absname));
-absname([H|T], Absname) ->
-    case H of
-        "."  -> absname(T, Absname);
-        ".." -> absname(T, tl(Absname));
-        _    -> absname(T, [H|Absname])
-    end.
-
-prompt_yn(Prompt, Default) when is_boolean(Default) ->
-    YN = case Default of
-        true -> "Yn";
-        false -> "yN"
-    end,
-    Str = lists:flatten(io_lib:format("~s [~s] > ", [Prompt, YN])),
-    case io:get_line(Str) of
-        "\n"  -> Default;
-        "y\n" -> true;
-        "Y\n" -> true;
-        "n\n" -> false;
-        "N\n" -> false;
-        _ -> false
-    end.

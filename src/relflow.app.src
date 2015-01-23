@@ -3,4 +3,7 @@
   {vsn, "0.1.0"},
   {modules, []},
   {registered, []},
+  {env, [
+    {log_level, info}
+  ]},
   {applications, [kernel, stdlib, getopt]}]}.
