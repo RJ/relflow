@@ -7,17 +7,21 @@
 
 %% Mods: [ {ModNameAtom, PathToBeamString}, ... ]
 appup_from_beam_paths(ModsA, ModsB, OV, NV) ->
+    %?DEBUG("appup_from_beam_paths ~p ~p ~s ~s",[ModsA,ModsB,OV,NV]),
     NamesA = [N || {N,_} <- ModsA],
     NamesB = [N || {N,_} <- ModsB],
     AddedModNames = NamesB -- NamesA,
-    DeletedModNames = NamesB -- NamesA,
-    SameMods = lists:dropwhile(fun(E) -> lists:member(element(1,E),AddedModNames) end, ModsB),
+    DeletedModNames = NamesA -- NamesB,
+    SameMods = lists:filter(fun({MName,MPath}) -> not lists:member(MName,AddedModNames) end, ModsB),
+    ?DEBUG("Added: ~p",[AddedModNames]),
+    ?DEBUG("Deleted: ~p",[DeletedModNames]),
+    ?DEBUG("Same: ~p",[SameMods]),
     Pairs =
         [ {[{add_module,M}],[{delete_module,M}]} || M <- AddedModNames ] ++
         [ {[{delete_module,M}],[{add_module,M}]} || M <- DeletedModNames ] ++
         lists:map(
             fun({M,PathB}) ->
-                {M, PathA} = proplists:get_value(M, ModsA),
+                PathA = proplists:get_value(M, ModsA),
                 appup_instructions_between_beams(PathA, PathB, OV, NV, M)
             end,
             SameMods),
@@ -28,6 +32,7 @@ appup_from_beam_paths(ModsA, ModsB, OV, NV) ->
     }.
 
 appup_instructions_between_beams(PathA, PathB, OV, NV, M) when is_list(PathA), is_list(PathB), is_atom(M) ->
+    ?DEBUG("appup_instructions_between_beams ~s ~s ~s ~s ~s",[PathA,PathB,OV,NV,M]),
     {ok, BeamA} = file:read_file(PathA),
     {ok, BeamB} = file:read_file(PathB),
     case BeamA == BeamB of
@@ -61,7 +66,7 @@ appup_instructions_between_beams(BeamA, BeamB, OV, NV, M) when is_binary(BeamA),
                         {[UpdateM, ApplyUp], [UpdateM, ApplyDown]}
                 end;
             false ->
-                case HasCC of
+                case HasCC andalso did_state_record_change(BeamA, BeamB) of
                     true  ->
                         Up = [{update, M, {advanced, {OV,NV,Props}}}],
                         Dn = [{update, M, {advanced, {NV,OV,Props}}}],
@@ -71,10 +76,10 @@ appup_instructions_between_beams(BeamA, BeamB, OV, NV, M) when is_binary(BeamA),
                         Dn = [{load_module, M}],
                         {Up, Dn}
                 end
-        end ++
+        end] ++ lists:flatten([
         HasUK andalso {[{apply, {M, appup_apply_upgrade_hook,   [OV,NV,Props]}}],[]} orelse [],
         HasDK andalso {[], [{apply, {M, appup_apply_downgrade_hook, [NV,OV,Props]}}]} orelse []
-    ]).
+    ])).
 
 flatten_updown_pairs(Pairs) ->
     flatten_updown_pairs(Pairs, [], []).

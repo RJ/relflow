@@ -8,11 +8,11 @@
 main(Args) ->
     application:load(relflow),
     InitialState = #state{},
-    relflow_log:init(relflow, "info"),
+    relflow_log:init(command_line, "info"),
     case relflow_cli:parse_args(Args, InitialState) of
         {ok, State = #state{}} ->
             %?INFO("STATE: ~p",[State]),
-            relflow_log:init(relflow, State#state.loglevel),
+            relflow_log:init(command_line, State#state.loglevel),
             try run(State) of
                 _ -> ok
             catch
@@ -104,6 +104,14 @@ exec_plans(State, AppPlans) ->
     State2 = process_app_plans(AppPlans, State),
     RelxFile = State2#state.relxfile,
     {ok, NewRelVsn} = relflow_vsn:bump_relx_vsn(RelxFile, list_to_atom(State2#state.relname), State2#state.upfrom),
+    ?INFO("App upgrade summary:",[]),
+    lists:foreach(
+        fun ({#app{name=AppName,vsn=OV},_,{appup, NV, _}}) ->
+            ?INFO("* ~s-~s  -->  ~s-~s",[AppName,OV,AppName,NV]);
+            (_) ->
+                ok
+        end,
+        AppPlans),
     ?INFO("New release version: ~s", [NewRelVsn]),
     State2.
 
@@ -114,34 +122,30 @@ process_app_plan({_OApp, _NApp=#app{name=Appname,vsn=Vsn}, not_upgraded}, State)
     ?DEBUG("app: ~s-~s unchanged",[Appname, Vsn]),
     State;
 
-process_app_plan({OApp,NApp,{needs_version_bump, UpInstructions, Level}}, State) when is_atom(Level) ->
+process_app_plan({OApp,NApp,{appup, NewVsn, AUTerm}}, State) ->
     %% we know we need to dump the app vsn at this point.
     #app{name=AppName,vsn=CurrVsn} = OApp,
     AppSrcFile = NApp#app.src  ++ "/" ++ atom_to_list(NApp#app.name) ++ ".app.src",
     AppFile    = NApp#app.ebin ++ "/" ++ atom_to_list(NApp#app.name) ++ ".app",
-    {ok, CurrVsn, NewVsn} = relflow_vsn:bump_dot_apps(AppSrcFile, AppFile, Level),
-    ?INFO("app: ~s-~s\t  --[~s bump]-->\t  ~s-~s",[AppName, CurrVsn, Level, AppName, NewVsn]),
-    DownInstructions = reverse_appup_instructions(UpInstructions),
-    AppUpTerm = {NewVsn,
-                 [{CurrVsn, UpInstructions}],
-                 [{CurrVsn, DownInstructions}]
-                },
+    {ok, CurrVsn, NewVsn} = relflow_vsn:bump_dot_apps(AppSrcFile, AppFile, NewVsn),
+    ?DEBUG("app: ~s-~s\t  --[bump]-->\t  ~s-~s",[AppName, CurrVsn, AppName, NewVsn]),
     AppUpPath = NApp#app.ebin ++ "/" ++ atom_to_list(NApp#app.name) ++ ".appup",
     %% TODO what if this vsn->vsn upgrade term exists in appup already
-    ok = file:write_file(AppUpPath, io_lib:format("~p.\n\n",[AppUpTerm])),
+    ok = file:write_file(AppUpPath, io_lib:format("~p.\n\n",[AUTerm])),
     ?INFO("Wrote ~s.appup: ~s",[AppName, AppUpPath]),
-    State.
+    State;
+
+process_app_plan(P, _State) ->
+    ?ERROR("Unhandled plan: ~p",[P]),
+    erlang:halt(2).
 
 print_app_plans(Plans) ->
     lists:foreach(
         fun ({_OApp, _App, not_upgraded}) ->
                 ok;
-            ({_OApp, App, {needs_version_bump,Instrs,Level}}) ->
-                NewVsn = relflow_vsn:bump_version(App#app.vsn, Level),
-                ?INFO("~s-~s\t ~s increase to ~s",[App#app.name, App#app.vsn, Level, NewVsn]),
-                lists:foreach(fun(Inst) ->
-                    ?DEBUG(" * ~p",[Inst])
-                end, Instrs)
+            ({_OApp, App, {appup, NewVsn, AUTerm}}) ->
+                ?INFO("UPGRADING ~s @ ~s --> ~s",[App#app.name, App#app.vsn, NewVsn]),
+                ?INFO("APPUP: ~p", [AUTerm])
         end, Plans).
 
 parse_local_appvers(Dirs) ->
@@ -160,7 +164,9 @@ find_app_files([Dir|Dirs], Acc) ->
                                   fun(F,A) -> [F|A] end, []),
     find_app_files(Dirs, Acc ++ AppFiles).
 
-make_appup({OldApp = #app{}, NewApp = #app{}}) ->
+make_appup({OldApp = #app{vsn=VsnA}, NewApp0 = #app{}}) ->
+    VsnB = relflow_vsn:bump_version(VsnA, major),
+    NewApp = NewApp0#app{vsn=VsnB},
     ModsA = [ {M, filename:join([OldApp#app.ebin, atom_to_list(M) ++ ".beam"])}
               || M <- OldApp#app.mods ],
     ModsB = [ {M, filename:join([NewApp#app.ebin, atom_to_list(M) ++ ".beam"])}
@@ -168,8 +174,7 @@ make_appup({OldApp = #app{}, NewApp = #app{}}) ->
     OV = OldApp#app.vsn,
     NV = NewApp#app.vsn,
     AppUpT = relflow_beamcmp:appup_from_beam_paths(ModsA, ModsB, OV, NV),
-    ?INFO("APPUP ~p",[AppUpT]),
-    AppUpT.
+    {appup, NV, AppUpT}.
 
 %% Figure out if it's a minor or patch bump.
 %% patch bumps are all load_modules
@@ -194,31 +199,6 @@ sort_mods(Mods) ->
     Mods).
 
 
-appup_instruction_for_module(M, OldApp, NewApp) ->
-    OldBeamPath = filename:join([OldApp#app.ebin, atom_to_list(M) ++ ".beam"]),
-    NewBeamPath = filename:join([NewApp#app.ebin, atom_to_list(M) ++ ".beam"]),
-    #app{vsn=OV} = OldApp,
-    #app{vsn=NV} = NewApp,
-    relflow_beamcmp:instructions_for_upgrade(OldBeamPath, NewBeamPath, OV, NV, M).
-
-appup_for_code_change(M, OldApp, NewApp) ->
-    [{update, M, {advanced, [OldApp#app.vsn, NewApp#app.vsn]}}].
-
-appup_for_supervisor(M, Minfo, OldApp, _NewApp) ->
-    I = {update, M, supervisor},
-    %% Support the Dukes of Erl erlrc convention
-    %% ie. call sup_upgrade_notify/2 if exported.
-    case lists:member({sup_upgrade_notify, 2},
-            proplists:get_value(exports, Minfo, [])) of
-        true ->
-            %% bit of a nasty assumption here, we don't know the new app vsn yet
-            %% so we assume it's a minor bump. can't be patch bump since there
-            %% is a change to a supervisor.
-            [I, {apply, {M, sup_upgrade_notify,
-                         [OldApp#app.vsn, relflow_vsn:bump_version(OldApp#app.vsn,minor)]}}];
-        false ->
-            [I]
-    end.
 parse_app_file(Path) ->
     %io:format("parse_app_file ~s\n",[Path]),
     {ok, [{application, AppName, Sections}]} = file:consult(Path),
