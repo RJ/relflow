@@ -60,7 +60,7 @@ do_appups_1(State, OldVsn, AllOldApps) ->
     %% and then check if any of the modules are new/changed, so we can generate
     %% appups.
     %% Apps will either be in deps/ or src,ebin or apps/*/src,ebin
-    AllCurrentApps = parse_local_appvers(["ebin", "apps", "deps"]),
+    AllCurrentApps = parse_local_appvers(["ebin", "apps"]),
     ?DEBUG("new release apps: ~p",[AllCurrentApps]),
     %% since we dont need appup instructions for added/removed apps, just find
     %% the list of new apps that also are in the old release, for diffing.
@@ -173,8 +173,13 @@ make_appup({OldApp = #app{vsn=VsnA}, NewApp0 = #app{}}) ->
               || M <- NewApp#app.mods ],
     OV = OldApp#app.vsn,
     NV = NewApp#app.vsn,
-    AppUpT = relflow_beamcmp:appup_from_beam_paths(ModsA, ModsB, OV, NV),
-    {appup, NV, AppUpT}.
+    case relflow_beamcmp:appup_from_beam_paths(ModsA, ModsB, OV, NV) of
+        undefined ->
+            not_upgraded;
+        {_, _, _} = AppUpT ->
+            %?INFO("make_appup ~s ~p",[NewApp#app.name, AppUpT]),
+            {appup, NV, AppUpT}
+    end.
 
 %% Figure out if it's a minor or patch bump.
 %% patch bumps are all load_modules

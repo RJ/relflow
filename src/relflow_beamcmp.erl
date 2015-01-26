@@ -26,19 +26,24 @@ appup_from_beam_paths(ModsA, ModsB, OV, NV) ->
             end,
             SameMods),
     {Ups, Downs} = flatten_updown_pairs(Pairs),
-    {NV,
-     [{OV, sort_ais(Ups)}],
-     [{OV, sort_ais(Downs)}]
-    }.
+    case {Ups, Downs} of
+        {[], []} ->
+            undefined;
+        _ ->
+            {NV,
+             [{OV, sort_ais(Ups)}],
+             [{OV, sort_ais(Downs)}]
+            }
+    end.
 
 appup_instructions_between_beams(PathA, PathB, OV, NV, M) when is_list(PathA), is_list(PathB), is_atom(M) ->
-    ?DEBUG("appup_instructions_between_beams ~s ~s ~s ~s ~s",[PathA,PathB,OV,NV,M]),
     {ok, BeamA} = file:read_file(PathA),
     {ok, BeamB} = file:read_file(PathB),
     case BeamA == BeamB of
         true  ->
-            {[],[]}; %% same file contents
+            undefined;
         false ->
+            ?DEBUG("appup_instructions_between_beams ~s ~s ~s ~s ~s",[PathA,PathB,OV,NV,M]),
             appup_instructions_between_beams(BeamA, BeamB, OV, NV, M)
     end;
 
@@ -52,7 +57,7 @@ appup_instructions_between_beams(BeamA, BeamB, OV, NV, M) when is_binary(BeamA),
     HasUK = lists:member({appup_apply_upgrade_hook,3},Exports),
     HasDK = lists:member({appup_apply_downgrade_hook,3},Exports),
     Props = [],
-    flatten_updown_pairs([
+    F = flatten_updown_pairs([
         case IsSup of
             true  ->
                 HasUN = lists:member({sup_upgrade_notify,2}, Exports),
@@ -77,13 +82,29 @@ appup_instructions_between_beams(BeamA, BeamB, OV, NV, M) when is_binary(BeamA),
                         {Up, Dn}
                 end
         end] ++ lists:flatten([
-        HasUK andalso {[{apply, {M, appup_apply_upgrade_hook,   [OV,NV,Props]}}],[]} orelse [],
-        HasDK andalso {[], [{apply, {M, appup_apply_downgrade_hook, [NV,OV,Props]}}]} orelse []
-    ])).
+        case HasUK of
+            true ->
+                {[{apply, {M, appup_apply_upgrade_hook,   [OV,NV,Props]}}],[]};
+            false ->
+                []
+        end,
+        case HasDK of
+           true ->
+               {[], [{apply, {M, appup_apply_downgrade_hook, [NV,OV,Props]}}]};
+           false ->
+               []
+        end
+    ])),
+    case F of
+        {[],[]} -> undefined;
+        _ -> F
+    end.
 
 flatten_updown_pairs(Pairs) ->
     flatten_updown_pairs(Pairs, [], []).
 
+flatten_updown_pairs([undefined|Rest], UpAcc, DownAcc) ->
+    flatten_updown_pairs(Rest, UpAcc, DownAcc);
 flatten_updown_pairs([], UpAcc, DownAcc) ->
     {UpAcc, DownAcc};
 flatten_updown_pairs([{Ups,Dns}|Rest], UpAcc, DownAcc) ->
@@ -129,6 +150,17 @@ extract_module_info(Beam) ->
 sort_ais(L) ->
     lists:sort(fun sort_ais_cmp/2, L).
 
+%% we always want to load/add/update a module before calling apply MFA on it:
+sort_ais_cmp({load_module, M},   {apply, {M, _F, _A}}) ->
+    true;
+sort_ais_cmp({add_module, M},    {apply, {M, _F, _A}}) ->
+    true;
+sort_ais_cmp({update, M, _},     {apply, {M, _F, _A}}) ->
+    true;
+%% and we always do the apply MFA before we delete the module
+sort_ais_cmp({delete_module, M}, {apply, {M, _F, _A}}) ->
+    false;
+%%
 %% sorting precedence for various types of appup instruction
 sort_ais_cmp({add_module,_}=A,{add_module,_}=B) ->
     compare(A,B);
@@ -165,6 +197,8 @@ cmp(A,B) when is_list(A), is_list(B) ->
 cmp(A,B) ->
     A =< B.
 
+unpack({add_module,M}) -> M;
+unpack({delete_module,M}) -> M;
 unpack({load,M}) -> M;
 unpack({update,M,_}) -> M;
 unpack({apply,{M,_,_}}) -> M;

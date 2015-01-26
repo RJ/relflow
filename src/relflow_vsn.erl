@@ -1,13 +1,16 @@
 %% rewrite app and app.src files to update vsn field
 -module(relflow_vsn).
 -include("relflow.hrl").
--compile(export_all).
+-export([bump_relx_vsn/3, bump_dot_apps/3, bump_version/2]).
 
 -define(AppHeader, "%% Vsn auto-managed by relflow utility.\n%% DO NOT CHANGE VSN FIELD MANUALLY!").
 -define(is_level(Level), (Level == major orelse Level == minor orelse Level == patch)).
 
 int(Str) ->
-    {I,""} = string:to_integer(Str), I.
+    case string:to_integer(Str) of
+        {I,""} -> I;
+        _ -> Str
+    end.
 
 str2vsn(Str) ->
     case string:tokens(Str, ".") of
