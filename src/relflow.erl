@@ -161,36 +161,23 @@ find_app_files([Dir|Dirs], Acc) ->
     find_app_files(Dirs, Acc ++ AppFiles).
 
 make_appup({OldApp = #app{}, NewApp = #app{}}) ->
-    {UpInstructions, Level} = make_appup_instructions(OldApp, NewApp),
-    case UpInstructions of
-        [] when OldApp#app.vsn =:= NewApp#app.vsn ->
-            not_upgraded;
-        _L when is_list(_L) ->
-            {needs_version_bump, UpInstructions, Level}
-    end.
+    ModsA = [ {M, filename:join([OldApp#app.ebin, atom_to_list(M) ++ ".beam"])}
+              || M <- OldApp#app.mods ],
+    ModsB = [ {M, filename:join([NewApp#app.ebin, atom_to_list(M) ++ ".beam"])}
+              || M <- NewApp#app.mods ],
+    OV = OldApp#app.vsn,
+    NV = NewApp#app.vsn,
+    AppUpT = relflow_beamcmp:appup_from_beam_paths(ModsA, ModsB, OV, NV),
+    ?INFO("APPUP ~p",[AppUpT]),
+    AppUpT.
 
-make_appup_instructions(OldApp = #app{}, NewApp = #app{}) ->
-    OldMods = OldApp#app.mods,
-    NewMods = NewApp#app.mods,
-    %% Detect newly added, removed, or modules that exist in both apps:
-    %% Modules in both old and new will be compared to see if they need loading
-    AddedMods   = lists:dropwhile(fun(E)->lists:member(E,OldMods)end, NewMods),
-    RemovedMods = lists:dropwhile(fun(E)->lists:member(E,NewMods)end, OldMods),
-    SameMods    = sets:to_list(sets:intersection(sets:from_list(OldMods),
-                                                 sets:from_list(NewMods))),
-    Instructions = lists:flatten([ appup_instruction_for_module(M, OldApp, NewApp) || M <- sort_mods(SameMods) ]),
-    %% Figure out if it's a minor or patch bump.
-    %% patch bumps are all load_modules
-    Level = case lists:filter(fun({load_module,_}) -> false ; (_) -> true end, Instructions) of
+%% Figure out if it's a minor or patch bump.
+%% patch bumps are all load_modules
+guess_level_from_instructions(Instructions) ->
+    case lists:filter(fun({load_module,_}) -> false ; (_) -> true end, Instructions) of
         [] -> patch;
         _  -> minor
-    end,
-    FinalInstructions = lists:flatten([
-        [ {add_module, M} || M <- AddedMods ],
-        Instructions,
-        [ {delete_module, M} || M <- RemovedMods ]
-    ]),
-    {FinalInstructions, Level}.
+    end.
 
 %% Sort _sup modules first
 sort_mods(Mods) ->
@@ -206,32 +193,13 @@ sort_mods(Mods) ->
         end,
     Mods).
 
-reverse_appup_instructions(L) ->
-    reverse_appup_instructions(L,[]).
-
-reverse_appup_instructions([], Acc) -> Acc;
-reverse_appup_instructions([I|Rest], Acc) ->
-    reverse_appup_instructions(Rest, [reverse_appup_instruction(I) | Acc]).
-
-reverse_appup_instruction({add_module, M})    -> {delete_module, M};
-reverse_appup_instruction({delete_module, M}) -> {add_module, M};
-reverse_appup_instruction({update, M, {advanced, [A,B]}}) -> {update, M, {advanced, [B,A]}};
-reverse_appup_instruction({apply, {M, sup_upgrade_notify, [A,B]}}) -> {apply, {M, sup_upgrade_notify, [B,A]}};
-reverse_appup_instruction(Other) -> Other.
 
 appup_instruction_for_module(M, OldApp, NewApp) ->
     OldBeamPath = filename:join([OldApp#app.ebin, atom_to_list(M) ++ ".beam"]),
     NewBeamPath = filename:join([NewApp#app.ebin, atom_to_list(M) ++ ".beam"]),
-    case relflow_beamcmp:diff(OldBeamPath, NewBeamPath) of
-        false ->
-            [];
-        load_module ->
-            [{load_module, M}];
-        {supervisor, Minfo} ->
-            appup_for_supervisor(M, Minfo, OldApp, NewApp);
-        code_change ->
-            appup_for_code_change(M, OldApp, NewApp)
-    end.
+    #app{vsn=OV} = OldApp,
+    #app{vsn=NV} = NewApp,
+    relflow_beamcmp:instructions_for_upgrade(OldBeamPath, NewBeamPath, OV, NV, M).
 
 appup_for_code_change(M, OldApp, NewApp) ->
     [{update, M, {advanced, [OldApp#app.vsn, NewApp#app.vsn]}}].

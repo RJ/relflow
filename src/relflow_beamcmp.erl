@@ -2,55 +2,87 @@
 %% Compare two .beam files, detect nature of the changes between versions
 %%
 -module(relflow_beamcmp).
--export([diff/2]).
+-export([appup_from_beam_paths/4]).
 -include("relflow.hrl").
 
-%% detect nature of change to a beam file
-%% returns:
-%%  load_module
-%%  code_change
-%%  {supervisor, [...]}
-diff(PathA, PathB) when is_list(PathA), is_list(PathB) ->
-    case filename:basename(PathA) == filename:basename(PathB) of
-        true ->
-            do_diff(PathA, PathB);
-        false ->
-            throw("diffing beams with different names, wtf")
-    end.
+%% Mods: [ {ModNameAtom, PathToBeamString}, ... ]
+appup_from_beam_paths(ModsA, ModsB, OV, NV) ->
+    NamesA = [N || {N,_} <- ModsA],
+    NamesB = [N || {N,_} <- ModsB],
+    AddedModNames = NamesB -- NamesA,
+    DeletedModNames = NamesB -- NamesA,
+    SameMods = lists:dropwhile(fun(E) -> lists:member(element(1,E),AddedModNames) end, ModsB),
+    Pairs =
+        [ {[{add_module,M}],[{delete_module,M}]} || M <- AddedModNames ] ++
+        [ {[{delete_module,M}],[{add_module,M}]} || M <- DeletedModNames ] ++
+        lists:map(
+            fun({M,PathB}) ->
+                {M, PathA} = proplists:get_value(M, ModsA),
+                appup_instructions_between_beams(PathA, PathB, OV, NV, M)
+            end,
+            SameMods),
+    {Ups, Downs} = flatten_updown_pairs(Pairs),
+    {NV,
+     [{OV, sort_ais(Ups)}],
+     [{OV, sort_ais(Downs)}]
+    }.
 
-%%% ----
-
-do_diff(PathA, PathB) when PathA == PathB ->
-    false;
-do_diff(PathA, PathB) when is_list(PathA), is_list(PathB) ->
+appup_instructions_between_beams(PathA, PathB, OV, NV, M) when is_list(PathA), is_list(PathB), is_atom(M) ->
     {ok, BeamA} = file:read_file(PathA),
     {ok, BeamB} = file:read_file(PathB),
     case BeamA == BeamB of
-        true  -> false; %% same file contents
-        false -> beam_diff_type(BeamA, BeamB)
-    end.
-
-beam_diff_type(BeamA, BeamB) when is_binary(BeamA), is_binary(BeamB) ->
-    Minfo = extract_module_info(BeamB),
-    HasBehaviour = fun(B) ->
-        lists:member(B, proplists:get_value(behaviours, Minfo, []))
-    end,
-    HasCodeChange = lists:member({code_change, 3}, Minfo) orelse
-                        lists:member({code_change, 4}, Minfo),
-    case HasBehaviour(supervisor) of
-        true ->
-            {supervisor, Minfo};
+        true  ->
+            {[],[]}; %% same file contents
         false ->
-            case HasCodeChange of
-                true ->
-                    case did_state_record_change(BeamA, BeamB) of
-                        true  -> code_change;
-                        false -> load_module
-                    end;
-                false ->
-                    load_module
-            end
-    end.
+            appup_instructions_between_beams(BeamA, BeamB, OV, NV, M)
+    end;
+
+%% list of appup instructions between modules
+appup_instructions_between_beams(BeamA, BeamB, OV, NV, M) when is_binary(BeamA), is_binary(BeamB), is_atom(M) ->
+    Minfo = extract_module_info(BeamB),
+    Exports = proplists:get_value(exports, Minfo, []),
+    IsSup = lists:member(supervisor, proplists:get_value(behaviours, Minfo, [])),
+    HasCC = lists:member({code_change, 3}, Exports) orelse
+                            lists:member({code_change, 4}, Exports),
+    HasUK = lists:member({appup_apply_upgrade_hook,3},Exports),
+    HasDK = lists:member({appup_apply_downgrade_hook,3},Exports),
+    Props = [],
+    flatten_updown_pairs([
+        case IsSup of
+            true  ->
+                HasUN = lists:member({sup_upgrade_notify,2}, Exports),
+                UpdateM = {update, M, supervisor},
+                case HasUN of
+                    false ->
+                        {[UpdateM],[UpdateM]};
+                    true ->
+                        ApplyUp = {apply, {M, sup_upgrade_notify, [OV,NV]}},
+                        ApplyDown = {apply, {M, sup_upgrade_notify, [NV,OV]}},
+                        {[UpdateM, ApplyUp], [UpdateM, ApplyDown]}
+                end;
+            false ->
+                case HasCC of
+                    true  ->
+                        Up = [{update, M, {advanced, {OV,NV,Props}}}],
+                        Dn = [{update, M, {advanced, {NV,OV,Props}}}],
+                        {Up, Dn};
+                    false ->
+                        Up = [{load_module, M}],
+                        Dn = [{load_module, M}],
+                        {Up, Dn}
+                end
+        end ++
+        HasUK andalso {[{apply, {M, appup_apply_upgrade_hook,   [OV,NV,Props]}}],[]} orelse [],
+        HasDK andalso {[], [{apply, {M, appup_apply_downgrade_hook, [NV,OV,Props]}}]} orelse []
+    ]).
+
+flatten_updown_pairs(Pairs) ->
+    flatten_updown_pairs(Pairs, [], []).
+
+flatten_updown_pairs([], UpAcc, DownAcc) ->
+    {UpAcc, DownAcc};
+flatten_updown_pairs([{Ups,Dns}|Rest], UpAcc, DownAcc) ->
+    flatten_updown_pairs(Rest, UpAcc ++ Ups, DownAcc ++ Dns).
 
 %% would be better to use the abstract code to detect the record name
 %% returned from init/1, ie {ok, #state{}}, and check if that has changed.
@@ -87,4 +119,49 @@ extract_module_info(Beam) ->
         {behaviours, Behaviours},
         {exports, Exports}
     ].
+
+
+sort_ais(L) ->
+    lists:sort(fun sort_ais_cmp/2, L).
+
+%% sorting precedence for various types of appup instruction
+sort_ais_cmp({add_module,_}=A,{add_module,_}=B) ->
+    compare(A,B);
+%% add_module to the top
+sort_ais_cmp({add_module,_},_) ->
+    true;
+sort_ais_cmp({delete_module,_}=A,{delete_module,_}=B) ->
+    compare(A,B);
+%% delete_module to the bottom
+sort_ais_cmp({delete_module,_},_) ->
+    false;
+sort_ais_cmp({update,_,supervisor}=A,{update,_,supervisor}=B) ->
+    compare(A,B);
+%% supervisor updates before other module types
+sort_ais_cmp({update,_,supervisor},_) ->
+    true;
+%% otherwise compare module name using cmp_name/2
+sort_ais_cmp(A,B) ->
+    compare(A,B).
+
+compare(A,B) ->
+    cmp(unpack(A),unpack(B)).
+
+cmp(A,B) when is_atom(A), is_atom(B) ->
+    cmp(atom_to_list(A), atom_to_list(B));
+cmp(A,B) when is_list(A), is_list(B) ->
+    ASup = lists:suffix("_sup", A),
+    BSup = lists:suffix("_sup", B),
+    case {ASup, BSup} of
+        {true, false} -> true;
+        {false, true} -> false;
+        _             -> A =< B
+    end;
+cmp(A,B) ->
+    A =< B.
+
+unpack({load,M}) -> M;
+unpack({update,M,_}) -> M;
+unpack({apply,{M,_,_}}) -> M;
+unpack(M) -> M.
 
