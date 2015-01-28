@@ -28,6 +28,9 @@ the relevant .app and .app.src files in-place, write out appropriate
 .appup files for changed applications, and then add a new release
 section to your relx.config file with a new version string.
 
+You can run ````relflow```` without any arguments, and it will guess all
+the appropriate configuration options.
+
 At this point, review what changed with git diff.
 
 Now you're ready to:
