@@ -205,7 +205,6 @@ sort_mods(Mods) ->
 
 
 parse_app_file(Path) ->
-    %io:format("parse_app_file ~s\n",[Path]),
     {ok, [{application, AppName, Sections}]} = file:consult(Path),
     Vsn = proplists:get_value(vsn, Sections),
     Mods = proplists:get_value(modules, Sections),
@@ -220,7 +219,8 @@ parse_rel_app_entry({AppNameA,AppVer,load}, LibsDir) ->
 
 parse_rel_app_entry({AppNameA,AppVer}, LibsDir) ->
     case lists:member(AppNameA, relflow_utils:otp_app_names()) of
-        true -> [];
+        true ->
+            undefined;
         false ->
             AppName = atom_to_list(AppNameA),
             filename:join([LibsDir, AppName ++ "-" ++ AppVer, "ebin", AppName ++ ".app"])
@@ -230,9 +230,12 @@ parse_rel_file(Path, LibsDir, FilterFun) ->
     {ok, [Term]} = file:consult(Path),
     {release, {RelName, RelVsn}, {erts, _ErtsVsn}, AppVers} = Term,
     %% filter out the OTP-provided apps:
-    AppFiles = lists:flatten(lists:foldl(fun(AppTuple, Acc) ->
-                [parse_rel_app_entry(AppTuple, LibsDir) | Acc]
-    end, [], AppVers)),
+    AppFiles = lists:foldl(fun(AppTuple, Acc) ->
+                case parse_rel_app_entry(AppTuple, LibsDir) of
+                    undefined -> Acc;
+                    Entry -> [ Entry | Acc ]
+                end
+    end, [], AppVers),
     ?DEBUG("Appfiles: ~p",[AppFiles]),
     Apps0 = [ parse_app_file(F) || F <- AppFiles ],
     Apps = lists:filter(fun(#app{name=Name}) ->
