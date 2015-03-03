@@ -67,6 +67,5 @@ option.
 
 Create a standalone executable escript and copy into your PATH:
 
-    $ make
-    $ sudo cp ./relflow /usr/bin/
+    $ make install
 

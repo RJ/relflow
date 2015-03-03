@@ -19,6 +19,9 @@ deps:
 compile:
 	$(REBAR) skip_deps=true compile
 
+install: compile
+	sudo cp ./relflow /usr/bin/relflow
+
 escript: deps compile
 	$(REBAR) skip_deps=true escriptize
 
