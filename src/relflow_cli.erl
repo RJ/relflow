@@ -28,8 +28,6 @@ parse_args(Args, State0) ->
 opt_specs() ->
     [{relname, $n, "relname", string,
       "The release name you gave relx"},
-     {relpath, $p, "relpath", {string, "_rel/$relname"},
-      "The path to the releases dir (contains ./releases/ dir)"},
      {upfrom, $u, "upfrom", string,
       "The release version to upgrade from"},
      {relxfile, $r, "relxfile", {string, "./relx.config"},

@@ -1,27 +1,28 @@
 # Relflow - Erlang release workflow helper
 
+__This is currently being refactored to use git to track diffs between
+releases - feel free to ask me about this on IRC, RJ2 on freenode__
+
 Automatically..
 
 * writes .appup files
 * increments vsn field in .app and .app.src files
 * updates relx.config with new release info
 
-It's intended to work alongside ````relx````.
+It's intended to work alongside ````rebar3```` with `relx`
+release-building..
 
 __WARNING__ relflow modifies ````.app````, ````.app.src````,
 ````.appup````, and ````relx.config```` files in-place.
 Make sure you have committed all local modifications to git before running relflow.
 
+
 ## Workflow Example
 
-Your last deployed release was versioned "1.0.0", and as such you have a
-````./_rel/$relname/releases/1.0.0```` dir, and associated
-````./_rel/$relname/lib/...```` dirs.
+Where rel-xxx-previous is the git tag of the release you want to upgrade
+from:
 
-You make some changes to various ````.erl```` files, run ````rebar
-compile````, test, and are ready to create+deploy the release.
-
-    $ relflow -u 1.0.0 -n $relname
+    $ relflow -u rel-xxx-previous
 
 This will figure out which app versions to increment, do so by modifying
 the relevant .app and .app.src files in-place, write out appropriate
@@ -35,7 +36,7 @@ At this point, review what changed with git diff.
 
 Now you're ready to:
 
-    $ relx -u 1.0.0 -v 1.1.0 -n $relname release relup
+    $ rebar3 release ...  (ie, run relx)
 
 and at no point did you have to mess around incrementing versions of
 apps and releases or write the appup files (just review the auto-genned
