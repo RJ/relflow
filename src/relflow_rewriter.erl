@@ -17,7 +17,7 @@ set_appfile_version(Filepath, NewVsn) when is_list(Filepath) ->
 
 set_rebar_relx_version(Filepath, NewVsn) ->
     {ok, Bin} = file:read_file(Filepath),
-    Lines = string:tokens(binary_to_list(Bin), "\n"),
+    Lines = lists:map(fun binary_to_list/1, binary:split(Bin, <<"\n">>, [global])),
     Contents = set_rebar_relx_version_1(NewVsn, Lines, false, []),
     ok = file:write_file(Filepath, Contents).
 
