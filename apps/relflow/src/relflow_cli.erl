@@ -134,8 +134,8 @@ fix_state(S=#state{upfrom=undefined,relpath=RP}) ->
 fix_state(S=#state{}) ->
     S.
 
-usage_err(S) ->
-    stderr(S).
+%usage_err(S) ->
+    %stderr(S).
 
 %check_state(#state{relvsn=undefined}) ->
     %usage_err("Missing relvsn");
