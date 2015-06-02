@@ -25,7 +25,7 @@ main(Args) ->
 run(State = #state{upfrom=Rev}) ->
     try
         Changes = relflow_changed_files:since(Rev),
-        Changes2 = relflow_appup:generate_appups(Changes),
+        Changes2 = relflow_appup:generate_appups(Changes, State),
         %io:format("Changes->\n~p\n",[Changes2]),
         maybe_exec(State, Changes2),
         erlang:halt(0)

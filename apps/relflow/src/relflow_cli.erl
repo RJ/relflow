@@ -34,7 +34,8 @@ opt_specs() ->
       "Path to relx.config, for adding new release section"},
      {loglevel, $l, "loglevel", {string, "info"},
       "Verbosity: debug, info, warn, error"},
-
+     {profile, $p, "profile", {string, "default"},
+      "rebar3 profile name, to read beams from for appup checking"},
      {help, $h, "help", undefined,
       "Print usage message"},
      {version, $v, "version", undefined,
@@ -66,6 +67,8 @@ opt2state([{relxfile, Fn}|Opts], State) ->
         F ->
             opt2state(Opts, State#state{relxfile=F})
     end;
+opt2state([{profile, P} | Opts], State) ->
+    opt2state(Opts, State#state{profile=P});
 opt2state([{relname, N} | Opts], State) ->
     opt2state(Opts, State#state{relname=N});
 opt2state([{relpath, P} | Opts], State) ->

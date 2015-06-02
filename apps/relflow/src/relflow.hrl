@@ -3,9 +3,9 @@
         relname
     ,   relpath
     ,   upfrom
-    ,   relvsn
     ,   loglevel
     ,   relxfile
+    ,   profile
 }).
 
 

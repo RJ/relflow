@@ -1,9 +1,10 @@
 -module(relflow_appup).
--export([generate_appups/1]).
+-include("relflow.hrl").
+-export([generate_appups/2]).
 
-generate_appups(Map) when is_map(Map) ->
+generate_appups(Map, #state{profile=Profile}) when is_map(Map) ->
     NextVsn = next_vsn(),
-    Ctx = #{next_vsn => NextVsn},
+    Ctx = #{next_vsn => NextVsn, profile => Profile},
     maps:map(fun(K,V) ->
           create_appup_term(generate_appup(K,V,Ctx))
     end, Map).
@@ -25,7 +26,7 @@ create_appup_term(#{vsn := FromVer,
     maps:put(appup_term, T, M).
 
 generate_appup(AppName, AppMap = #{changes := Changes, vsn := Vsn}, Ctx0 = #{next_vsn := NextVsn}) ->
-    Ctx = Ctx0#{profile => "dev", appname => AppName, vsn => Vsn},
+    Ctx = Ctx0#{appname => AppName, vsn => Vsn},
     Instructions = maps:fold(
         fun(Mod, ModMap, InstrAcc) ->
             [module_instructions(Mod, ModMap, Ctx) | InstrAcc]
