@@ -1,33 +1,14 @@
-ERLFLAGS= -pa $(CURDIR)/ebin -pa $(CURDIR)/deps/*/ebin
-ERL = $(shell which erl)
-
-ifeq ($(ERL),)
-$(error "Erlang not found")
+ifeq ($(shell which rebar3),)
+$(error "rebar3 not found")
 endif
 
-# Just use local rebar, don't want any nasty surprises
-REBAR=$(CURDIR)/rebar
+.PHONY: all install
 
-.PHONY: all compile escript
+all:
+	rebar3 escriptize
 
-all: deps compile escript
-
-deps:
-	$(REBAR) get-deps
-	$(REBAR) compile
-
-compile:
-	$(REBAR) skip_deps=true compile
-
-install: compile
-	sudo cp ./relflow /usr/bin/relflow
-
-escript: deps compile
-	$(REBAR) skip_deps=true escriptize
+install: all
+	sudo cp _build/default/bin/relflow /usr/bin/relflow
 
 clean:
-	- rm -rf $(CURDIR)/ebin
-	$(REBAR) skip_deps=true clean
-
-distclean: clean
-	- rm -rvf $(CURDIR)/deps
+	rebar3 clean

@@ -30,7 +30,7 @@ opt_specs() ->
       "The release name you gave relx"},
      {upfrom, $u, "upfrom", string,
       "The release version to upgrade from"},
-     {relxfile, $r, "relxfile", {string, "./relx.config"},
+     {relxfile, $r, "relxfile", {string, "./rebar.config"},
       "Path to relx.config, for adding new release section"},
      {loglevel, $l, "loglevel", {string, "info"},
       "Verbosity: debug, info, warn, error"},
@@ -59,12 +59,11 @@ opt2state([], State) ->
 opt2state([{loglevel, L} | Opts], State) ->
     NewState = State#state{loglevel=L},
     opt2state(Opts, NewState);
-opt2state([{relxfile, F}|Opts], State) ->
-    case ec_file:exists(F) of
-        false ->
-            ?ERROR("Can't read relx.config: ~s",[F]),
+opt2state([{relxfile, Fn}|Opts], State) ->
+    case first_file_that_exists([Fn, "./relx.config", "./rebar.config"]) of
+        undefined ->
             error;
-        true ->
+        F ->
             opt2state(Opts, State#state{relxfile=F})
     end;
 opt2state([{relname, N} | Opts], State) ->
@@ -76,16 +75,32 @@ opt2state([{upfrom, U} | Opts], State) ->
 %opt2state([{relvsn, V} | Opts], State) ->
     %opt2state(Opts, State#state{relvsn=V}).
 
+first_file_that_exists([]) -> undefined;
+first_file_that_exists([F|Rest]) ->
+    case ec_file:exists(F) of
+        true -> F;
+        false -> first_file_that_exists(Rest)
+    end.
+
+%fix_state(S=#state{relxfile=undefined, relname=undefined}) ->
+    %case first_file_that_exists(["./relx.config", "./rebar.config"]) of
+        %undefined ->
+            %?ERROR("Can't find a relx or rebar.config, so can't guess release name", []),
+            %error;
+        %F ->
+            %fix_state(S#state{relxfile=F})
+    %end;
+
 fix_state(S=#state{relname=undefined,relxfile=RP}) when RP =/= undefined ->
     case guess_relname_from_relx(RP) of
         {ok, Relname} ->
             ?WARN("Assuming '--relname ~s' (extracted from ~s)",[Relname,RP]),
             fix_state(S#state{relname=atom_to_list(Relname)});
         {error, undefined} ->
-            ?ERROR("Can't guess --relname, no {release, ...} section in relx.config",[]),
+            ?ERROR("Can't guess --relname, no {release, ...} section in ~s",[RP]),
             error;
         {error, {ambiguous,Names}} ->
-            ?ERROR("Can't guess --relname, multiple release names found in relx.config: ~w",[Names]),
+            ?ERROR("Can't guess --relname, multiple release names found in ~s: ~w",[RP, Names]),
             error
     end;
 fix_state(S=#state{relname=RN, relpath="_rel/$relname"}) when is_list(RN) ->
@@ -136,7 +151,7 @@ show_version() ->
 
 show_usage() ->
     getopt:usage(opt_specs(), "relflow", "<options..>"),
-    io:format("Example: relflow -n myrelease -u 1.0\n\n").
+    io:format("Example: relflow -u v1.0\n\n").
 
 get_current_vsn_from_RELEASES(F) ->
     {ok, [L]} = file:consult(F),
@@ -144,12 +159,20 @@ get_current_vsn_from_RELEASES(F) ->
     Vsn.
 
 guess_relname_from_relx(RP) ->
-    {ok,L} = file:consult(RP),
+    RelxOpts = case file:consult(RP) of
+        {ok, L} ->
+           case proplists:get_value(relx, L) of
+               undefined ->
+                    L;
+               Else ->
+                   Else
+           end
+    end,
     Rels = lists:filter(fun(T) ->
                 is_tuple(T) andalso element(1,T) == release
-            end, L),
+            end, RelxOpts),
     case lists:usort(lists:map(fun(T) -> element(1,element(2,T)) end, Rels)) of
         [Relname] -> {ok, Relname};
         [] -> {error, undefined};
-        L -> {error, {ambiguous, L}}
+        Lst -> {error, {ambiguous, Lst}}
     end.

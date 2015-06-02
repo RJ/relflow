@@ -1,4 +1,5 @@
 -module(relflow_changed_files).
+-include("relflow.hrl").
 -export([since/1]).
 
 since(Rev) when is_list(Rev) ->
@@ -58,19 +59,26 @@ git_diff_names(Rev) when is_list(Rev) ->
 
 changed_modules_since(Rev) when is_list(Rev) ->
     lists:map(fun(Line) ->
-        [Status, Path] = string:tokens(Line, "\t"),
-        case string:tokens(Path, "/") of
-            ["apps", AppName, "src" | _PathElements] ->
-                Module = list_to_atom(filename:basename(Path, ".erl")),
-                StatusAtom = case Status of
-                    "D" -> deleted;
-                    "A" -> added;
-                    _   -> modified
-                end,
-                ModInfo = #{status => StatusAtom, path => Path},
-                {AppName, Module, ModInfo}
+        case string:tokens(Line, "\t") of
+            [Status, Path] ->
+                case string:tokens(Path, "/") of
+                    ["apps", AppName, "src" | _PathElements] ->
+                        Module = list_to_atom(filename:basename(Path, ".erl")),
+                        StatusAtom = case Status of
+                            "D" -> deleted;
+                            "A" -> added;
+                            _   -> modified
+                        end,
+                        ModInfo = #{status => StatusAtom, path => Path},
+                        {AppName, Module, ModInfo}
+                end;
+            _Else ->
+                io:format("git error: ~s\n",[Line]),
+                throw(git_error)
         end
-    end, git_diff_names(Rev)).
+        end,
+        git_diff_names(Rev)
+    ).
 
 gather_changed_modules(List) ->
     lists:foldl(fun({AppStr, Changes}, Acc) ->

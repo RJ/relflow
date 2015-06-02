@@ -6,4 +6,4 @@
   {env, [
     {log_level, info}
   ]},
-  {applications, [kernel, stdlib, getopt]}]}.
+  {applications, [kernel, stdlib, getopt, erlware_commons]}]}.

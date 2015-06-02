@@ -1,21 +1,26 @@
 # Relflow - Erlang release workflow helper
 
-__This is currently being refactored to use git to track diffs between
-releases - feel free to ask me about this on IRC, RJ2 on freenode__
+A tool to do all the boring bits of generating a reluppable erlang
+release.
 
-Automatically..
+Automatically:
 
-* writes .appup files
+* writes .appup files for changed applications
 * increments vsn field in .app and .app.src files
-* updates relx.config with new release info
+* updates relx.config with new release version
 
-It's intended to work alongside ````rebar3```` with `relx`
-release-building..
+It's intended to work alongside `rebar3` release building (which
+uses `relx`).
 
-__WARNING__ relflow modifies ````.app````, ````.app.src````,
-````.appup````, and ````relx.config```` files in-place.
+__WARNING__ relflow modifies `.app.src`,
+`.appup`, and `relx.config` files in-place.
 Make sure you have committed all local modifications to git before running relflow.
 
+## Installation
+
+* Have [rebar3](http://www.rebar3.org/) installed.
+* `rebar3 escriptize`
+* `sudo cp _build/default/bin/relflow /usr/bin/relflow`
 
 ## Workflow Example
 
@@ -24,49 +29,36 @@ from:
 
     $ relflow -u rel-xxx-previous
 
-This will figure out which app versions to increment, do so by modifying
-the relevant .app and .app.src files in-place, write out appropriate
-.appup files for changed applications, and then add a new release
-section to your relx.config file with a new version string.
+Relflow will now:
 
-You can run ````relflow```` without any arguments, and it will guess all
-the appropriate configuration options.
+* Check the git diff (ie: `git diff relx-xxx-previous`)
+* Generate an .appup for any application with changed modules (per the diff)
+* Rewrite .app.src files to increment the app vsn, for changed applications
+* Rewrite the rebar.config or relx.config to increment the release version
 
-At this point, review what changed with git diff.
+At this point, rebar has rewritten/created some files for you.
+Review what changed with git diff.
 
 Now you're ready to:
 
-    $ rebar3 release ...  (ie, run relx)
+    $ rebar3 release relup tar  (ie, run relx)
 
 and at no point did you have to mess around incrementing versions of
 apps and releases or write the appup files (just review the auto-genned
 ones, and possibly edit if needed).
 
-Relflow guesses whether to do a minor or patch bump of version numbers,
-depending on severity of modifications. TODO: make this configurable.
+### How relflow rewrites files
 
-Next step is to turn that into debs using the as-yet unreleased new
-tool, or just append "tar" to the relx command to deploy with tarball.
+**appup** files are rewritten using io_lib:format, which removes comments
+and formatting.
 
-## relflow --help
+The rebar/relx config is modified to preserve formatting,
+so you need to isolate and comment the version line like this:
 
-Relflow will guess everything, unless you specify with a command-line
-option.
+    {release, {foo,
+    "version.goes.here" %% relflow-release-version-marker
+    }, ...
 
-| Short | Long         | Type    | Description                                            |
-|:-----:|:------------:|:-------:|--------------------------------------------------------|
-| -n    | --relname    | string  | Release name, guessed from relx.config                 |
-| -p    | --relpath    | string  | Release dir, defaults to ./_rel/$relname               |
-| -u    | --upfrom     | string  | Previous release version, guessed from RELEASES file   |
-| -r    | --relxfile   | string  | Path of relx.config, defaults to ./relx.config         |
-| -l    | --loglevel   | string  | Log level: debug,info,warn,error(default: info)        |
-| -v    | --version    |         | Print relflow version                                  |
-| -h    | --help       |         | Print usage message                                    |
-
-
-## Build and install
-
-Create a standalone executable escript and copy into your PATH:
-
-    $ make install
+so that relflow can rewrite the file while preserving whitespace and
+comments.
 

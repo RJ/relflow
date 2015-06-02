@@ -48,7 +48,7 @@ maybe_exec(State, Map) ->
 new_rel_vsn() ->
     {{Year,Month,Day},{Hour,Min,Sec}} = erlang:localtime(),
     lists:flatten(
-      io_lib:format("rel-~4.10.0B~2.10.0B~2.10.0B.~2.10.0B~2.10.0B~2.10.0B",
+      io_lib:format("~4.10.0B~2.10.0B~2.10.0B.~2.10.0B~2.10.0B~2.10.0B",
         [Year, Month, Day, Hour, Min, Sec])).
 
 exec(_State, Map) ->
