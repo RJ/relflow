@@ -36,6 +36,8 @@ opt_specs() ->
       "Verbosity: debug, info, warn, error"},
      {profile, $p, "profile", {string, "default"},
       "rebar3 profile name, to read beams from for appup checking"},
+     {force, $f, "force", undefined,
+      "Force relflow to run even with uncommitted local changes"},
      {help, $h, "help", undefined,
       "Print usage message"},
      {version, $v, "version", undefined,
@@ -57,6 +59,8 @@ opts2state(Opts, _NonOpts, InitialState = #state{}) ->
 
 opt2state([], State) ->
     State;
+opt2state([force|Opts], State) ->
+    opt2state(Opts, State#state{force=true});
 opt2state([{loglevel, L} | Opts], State) ->
     NewState = State#state{loglevel=L},
     opt2state(Opts, NewState);

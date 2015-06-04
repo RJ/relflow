@@ -1,12 +1,18 @@
 -module(relflow_changed_files).
 -include("relflow.hrl").
--export([since/1]).
+-export([since/1, is_clean/0]).
 
 since(Rev) when is_list(Rev) ->
     R1 = since_revision(Rev),
     R2 = add_app_paths(R1),
     appvers_at_revision(R2, Rev).
 
+is_clean() ->
+    Cmd = "git diff-index --quiet HEAD -- && echo -n clean || echo -n dirty",
+    case os:cmd(Cmd) of
+        "clean" -> true;
+        "dirty" -> false
+    end.
 %%
 
 fmt(S,A) -> lists:flatten(io_lib:format(S,A)).

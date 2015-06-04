@@ -21,9 +21,22 @@ main(Args) ->
             erlang:halt(1)
     end.
 
+safe_to_run(#state{force=true}) ->
+    true;
+safe_to_run(_State) ->
+    case relflow_changed_files:is_clean() of
+        true -> true;
+        false ->
+            ?ERROR("Uncommitted changes, aborting. Commit stuff first, please.", []),
+            false
+    end.
 
 run(State = #state{upfrom=Rev}) ->
     try
+        case safe_to_run(State) of
+            false -> erlang:halt(4);
+            true  -> ok
+        end,
         Changes = relflow_changed_files:since(Rev),
         Changes2 = relflow_appup:generate_appups(Changes, State),
         %io:format("Changes->\n~p\n",[Changes2]),
@@ -32,7 +45,7 @@ run(State = #state{upfrom=Rev}) ->
     catch
         throw:{err, S, A} ->
             ?ERROR(S,A),
-            init:stop(1)
+            erlang:halt(3)
     end.
 
 
