@@ -30,6 +30,8 @@ opt_specs() ->
       "The release name you gave relx"},
      {upfrom, $u, "upfrom", string,
       "The release version to upgrade from"},
+     {nextver, $x, "nextversion", {string, "auto"},
+      "The (deb-compatible) version string to use for the next release"},
      {relxfile, $r, "relxfile", {string, "./rebar.config"},
       "Path to relx.config, for adding new release section"},
      {loglevel, $l, "loglevel", {string, "info"},
@@ -77,6 +79,8 @@ opt2state([{relname, N} | Opts], State) ->
     opt2state(Opts, State#state{relname=N});
 opt2state([{relpath, P} | Opts], State) ->
     opt2state(Opts, State#state{relpath=P});
+opt2state([{nextver, V}|Opts], State) ->
+    opt2state(Opts, State#state{nextver=V});
 opt2state([{upfrom, U} | Opts], State) ->
     opt2state(Opts, State#state{upfrom=U}).
 %opt2state([{relvsn, V} | Opts], State) ->

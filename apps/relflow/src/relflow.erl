@@ -55,16 +55,18 @@ maybe_exec(State, Map) ->
         true ->
             exec(State, Map);
         false ->
-            State
+            erlang:halt(1)
     end.
 
-new_rel_vsn() ->
+new_rel_vsn(#state{nextver=V}) when V =/= "auto", is_list(V) ->
+    V;
+new_rel_vsn(_State) ->
     {{Year,Month,Day},{Hour,Min,Sec}} = erlang:localtime(),
     lists:flatten(
       io_lib:format("~4.10.0B~2.10.0B~2.10.0B.~2.10.0B~2.10.0B~2.10.0B",
         [Year, Month, Day, Hour, Min, Sec])).
 
-exec(_State, Map) ->
+exec(State, Map) ->
     lists:foreach(fun({_AppName, #{appup_path := Path,
                                    appup_term := T,
                                    appsrc_path := AppSrc,
@@ -76,7 +78,7 @@ exec(_State, Map) ->
         ?INFO("Bumping version in ~s", [AppSrc]),
         ok = relflow_rewriter:set_appfile_version(AppSrc, NextVsn)
     end, maps:to_list(Map)),
-    NewRelVsn = new_rel_vsn(),
+    NewRelVsn = new_rel_vsn(State),
     ?INFO("Updating rebar.config release version to: ~s", [NewRelVsn]),
     relflow_rewriter:set_rebar_relx_version("rebar.config", NewRelVsn),
     %% print summary

@@ -3,6 +3,7 @@
         relname
     ,   relpath
     ,   upfrom
+    ,   nextver
     ,   loglevel
     ,   relxfile
     ,   profile
