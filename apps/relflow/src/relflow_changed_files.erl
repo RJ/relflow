@@ -1,6 +1,6 @@
 -module(relflow_changed_files).
 -include("relflow.hrl").
--export([since/1, is_clean/0]).
+-export([since/1, is_clean/0, relver_at/1]).
 
 since(Rev) when is_list(Rev) ->
     R1 = since_revision(Rev),
@@ -8,11 +8,20 @@ since(Rev) when is_list(Rev) ->
     appvers_at_revision(R2, Rev).
 
 is_clean() ->
-    Cmd = "git diff-index --quiet HEAD -- && echo -n clean || echo -n dirty",
+    Cmd = "git diff-index --quiet HEAD -- && echo clean || echo dirty",
     case os:cmd(Cmd) of
-        "clean" -> true;
-        "dirty" -> false
+        "clean" ++ _ -> true;
+        "dirty" ++ _ -> false
     end.
+
+relver_at(Rev) ->
+    File = "./rebar.config",
+    Cmd = fmt("git show ~s:~s", [Rev, File]),
+    Str = os:cmd(Cmd),
+    Terms = eval("["++Str++"]."),
+    Relx = proplists:get_value(relx, Terms),
+    {release, {_RelName,RelVsn}, _} = lists:keysearch(release, 1, Relx),
+    RelVsn.
 %%
 
 fmt(S,A) -> lists:flatten(io_lib:format(S,A)).
@@ -34,6 +43,7 @@ since_revision(Rev) when is_list(Rev) ->
       lists:sort(
           changed_modules_since(
             Rev))).
+
 
 appver_at_revision(Rev, Name) ->
     Cmd = fmt("git show ~s:apps/~s/src/~s.app.src", [Rev, Name, Name]),

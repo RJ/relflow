@@ -37,6 +37,8 @@ run(State = #state{upfrom=Rev}) ->
             false -> erlang:halt(4);
             true  -> ok
         end,
+        OldRelVer = relflow_changed_files:relver_at(Rev),
+        ?INFO("Upgrading from release vsn: ~s",[OldRelVer]),
         Changes = relflow_changed_files:since(Rev),
         Changes2 = relflow_appup:generate_appups(Changes, State),
         %io:format("Changes->\n~p\n",[Changes2]),

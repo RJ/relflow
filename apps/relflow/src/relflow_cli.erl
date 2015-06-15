@@ -47,6 +47,7 @@ opt_specs() ->
     ].
 
 opts2state(Opts, _NonOpts, InitialState = #state{}) ->
+    %?INFO("Opts ~p",[Opts]),
     case opt2state(Opts, InitialState) of
         error ->
             error;

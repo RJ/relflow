@@ -49,6 +49,7 @@ module_instructions(Mod, #{status := deleted}, _Ctx) ->
 
 module_instructions(Mod, #{status := modified}, #{vsn := FromVer, next_vsn := ToVer, appname := AppName, profile := Profile}) ->
     BeamInfo = beam_info(AppName, Mod, Profile),
+    ?DEBUG("~s : ~p",[Mod,BeamInfo]),
     case is_supervisor(BeamInfo) of
         true ->
             case has_sup_upgrade_notify(BeamInfo) of
