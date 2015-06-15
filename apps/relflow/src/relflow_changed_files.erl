@@ -16,11 +16,8 @@ is_clean() ->
 
 relver_at(Rev) ->
     File = "./rebar.config",
-    Cmd = fmt("git show ~s:~s", [Rev, File]),
-    Str = os:cmd(Cmd),
-    Terms = eval("["++Str++"]."),
-    Relx = proplists:get_value(relx, Terms),
-    {release, {_RelName,RelVsn}, _} = lists:keysearch(release, 1, Relx),
+    Cmd = fmt("git show ~s:~s | grep relflow-release-version-marker | awk -F '\"' '{print $2; exit}'", [Rev, File]),
+    RelVsn = string:strip(os:cmd(Cmd), right, $\n),
     RelVsn.
 %%
 

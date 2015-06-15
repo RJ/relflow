@@ -89,11 +89,15 @@ exec(State, Map) ->
         fun(#{appup_path := F1, appsrc_path := F2}, Acc) ->
         [F1, F2 | Acc]
     end, ["rebar.config"], maps:values(Map)),
-    io:format("Now run:\n\n"),
-    io:format("  git add ~s\n\n", [string:join(FilesTouched, " ")]),
-    io:format("  git commit -m\"relflow ~s --> ~s\"\n\n", [State#state.oldrelver, NewRelVsn]),
-    io:format("  git tag ~s\n\n", [NewRelVsn]),
-    io:format("  git push\n\n").
+    exec_cmd("git add ~s", [string:join(FilesTouched, " ")]),
+    exec_cmd("git commit -m\"relflow ~s --> ~s\"", [State#state.oldrelver, NewRelVsn]),
+    exec_cmd("git tag ~s", [NewRelVsn]),
+    io:format("Now run:\n  git push\n").
+
+exec_cmd(S,A) ->
+    Str = lists:flatten(io_lib:format(S,A)),
+    io:format("[running] $ ~s\n",[Str]),
+    io:format("~s",[os:cmd(Str)]).
 
 print_plan(Map) ->
     ?INFO("# APPUPS",[]),
