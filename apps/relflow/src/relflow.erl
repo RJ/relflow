@@ -95,7 +95,7 @@ exec(State, Map) ->
     end, ["rebar.config"], maps:values(Map)),
     exec_cmd("git add ~s", [string:join(FilesTouched, " ")]),
     exec_cmd("git commit -m\"relflow ~s --> ~s\"", [State#state.oldrelver, NewRelVsn]),
-    exec_cmd("git tag ~s", [NewRelVsn]),
+    exec_cmd("git tag v~s", [NewRelVsn]),
     io:format("Now run:\n  git push\n").
 
 exec_cmd(S,A) ->
