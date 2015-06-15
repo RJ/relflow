@@ -31,14 +31,15 @@ safe_to_run(_State) ->
             false
     end.
 
-run(State = #state{upfrom=Rev}) ->
+run(State0 = #state{upfrom=Rev}) ->
     try
-        case safe_to_run(State) of
+        case safe_to_run(State0) of
             false -> erlang:halt(4);
             true  -> ok
         end,
         OldRelVer = relflow_changed_files:relver_at(Rev),
         ?INFO("Upgrading from release vsn: ~s",[OldRelVer]),
+        State = State0#state{oldrelver=OldRelVer},
         Changes = relflow_changed_files:since(Rev),
         Changes2 = relflow_appup:generate_appups(Changes, State),
         %io:format("Changes->\n~p\n",[Changes2]),
@@ -90,7 +91,7 @@ exec(State, Map) ->
     end, ["rebar.config"], maps:values(Map)),
     io:format("Now run:\n\n"),
     io:format("  git add ~s\n\n", [string:join(FilesTouched, " ")]),
-    io:format("  git commit -m\"relflow --> ~s\"\n\n", [NewRelVsn]),
+    io:format("  git commit -m\"relflow ~s --> ~s\"\n\n", [State#state.oldrelver, NewRelVsn]),
     io:format("  git tag ~s\n\n", [NewRelVsn]),
     io:format("  git push\n\n").
 
