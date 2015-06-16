@@ -124,9 +124,13 @@ exec_2(Map, State, NewRelVsn) ->
         fmt("git commit -m\"relflow ~s --> ~s\"", [relflow_state:oldrelver(State), NewRelVsn]),
         fmt("git tag v~s", [NewRelVsn])
     ],
-    case relflow_state:autogit(State) of
-        true  -> exec_git(GitCmds);
-        false -> print_git(GitCmds)
+    case {relflow_state:autogit(State), relflow_state:force(State)} of
+        {true, false}  -> exec_git(GitCmds);
+        {false, true}  -> exec_git(GitCmds);
+        {false, false} -> print_git(GitCmds);
+        {true, true}   ->
+            rebar_api:warn("Not running git commands, because you --forced",[]),
+            print_git(GitCmds)
     end,
     {ok, relflow_state:rebar_state(State)}.
 
