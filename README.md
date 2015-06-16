@@ -13,7 +13,7 @@ release, namely:
 In-place file rewriting
 -----------------------
 
-relflow modifies `.app.src`, `.appup`, and `relx.config` files in-place.
+relflow modifies `.app.src`, `.appup`, and `rebar.config` files in-place.
 Make sure you have committed all local modifications to git before running relflow.
 
 `.appup` and `.app.src` files are `file:consult`ed, then written out
@@ -61,7 +61,7 @@ Add the relflow plugin to your `rebar.config`:
 
 Then:
 
-    $ rebar3 relflow --help
+    $ rebar3 help relflow
 
 
 License

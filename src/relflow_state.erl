@@ -2,22 +2,23 @@
 %% plus a couple of extra config values we store ourselves to be passed
 %% to our various helper modules
 -module(relflow_state).
+
 -record(relflow_st, {
             rebar_state,
-
             nextappver,
             oldrelver,
             nextver
          }).
+
 -export([
     new/1,
     relname/1,
     build_dir/1,
     upfrom/1,
-    relxfile/1,
     profile/1,
     force/1,
-
+    autogit/1,
+    rebar_state/1,
     nextver/1,
     set_default_nextver/2,
     oldrelver/1,
@@ -28,14 +29,15 @@
 
 new(RebarSt) -> #relflow_st{rebar_state = RebarSt}.
 
+rebar_state(#relflow_st{rebar_state = R}) -> R.
+
 relname(_State) -> "ircshard".
 
 build_dir(#relflow_st{rebar_state = State}) -> rebar_dir:base_dir(State).
 
 upfrom(State) -> parg(upfrom, State).
 
-
-relxfile(State) -> parg(relxfile, State).
+autogit(State) -> parg(autogit, State) == true.
 
 profile(State) -> lists:last(filename:split(build_dir(State))).
 
@@ -54,7 +56,7 @@ set_default_nextver(NV, State = #relflow_st{}) ->
        V      -> State#relflow_st{nextver=V}
    end.
 
-force(State) -> parg(force, State).
+force(State) -> parg(force, State) == true.
 
 %%
 

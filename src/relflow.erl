@@ -1,10 +1,11 @@
 -module('relflow').
--behaviour(provider).
+%-behaviour(provider).
 
 -export([init/1, do/1, format_error/1]).
 
 -define(PROVIDER, 'relflow').
 -define(DEPS, [app_discovery]).
+-define(PRV_ERROR(Reason), {error, {?MODULE, Reason}}).
 
 %% ===================================================================
 %% Public API
@@ -29,8 +30,8 @@ opts() ->
       "Git revision/tag to upgrade from (for appup generation)"},
      {nextver, $x, "nextversion", {string, "auto"},
       "The (deb-compatible) version string to use for the next release"},
-     {relxfile, $r, "relxfile", {string, "./rebar.config"},
-      "Path to relx.config, for adding new release section"},
+     {autogit, $g, "autogit", {boolean, true},
+      "Automatically add and commit relflow changes to git"},
      {force, $f, "force", {boolean, false},
       "Force relflow to run even with uncommitted local changes"}
     ].
@@ -42,43 +43,61 @@ do(RebarState) ->
               relflow_state:nextappver(new_app_vsn(Time),
                relflow_state:new(RebarState))),
 
-    Rev = relflow_state:upfrom(State0),
-    OldRelVer = relflow_git:relver_at(Rev),
-    State = relflow_state:oldrelver(OldRelVer, State0),
+    case relflow_state:upfrom(State0) of
+        undefined ->
+            ?PRV_ERROR(no_upfrom);
+        Rev ->
+            OldRelVer = relflow_git:relver_at(Rev),
+            State = relflow_state:oldrelver(OldRelVer, State0),
+            do_2(State)
+    end.
 
-    ChangesSinceRev = relflow_git:since(Rev),
-    ChangeMap = relflow_appup:generate_appups(ChangesSinceRev, State),
+do_2(State) ->
+    rebar_api:debug("relflow upgrading from release ~s to ~s",[
+                        relflow_state:oldrelver(State),
+                        relflow_state:nextver(State)]),
+    rebar_api:debug("bumped applications will use vsn: ~s", [
+                        relflow_state:nextappver(State)]),
+    ChangesSinceRev = relflow_git:since(relflow_state:upfrom(State)),
+    ChangeMap       = relflow_appup:generate_appups(ChangesSinceRev, State),
+    exec(ChangeMap, State).
 
-    rebar_api:debug("relflow upgrading from release ~s to ~s",[relflow_state:oldrelver(State),
-                                                               relflow_state:nextver(State)]),
-    rebar_api:debug("bumped applications will use vsn: ~s", [relflow_state:nextappver(State)]),
-    exec(ChangeMap, State),
-    {ok, RebarState}.
-
+format_error(unclean_git) ->
+    "Relflow modifies files in-place. Will not run with uncommitted changes. See 'git status'.";
+format_error(no_upfrom) ->
+    "You must provide a git revision to upgrade from, eg: rebar3 relflow -u abc123";
+format_error({relvsn_ordering, Old, New}) ->
+    io_lib:format("New release vsn is less than old! (new:~s < old:~s)", [New, Old]);
 format_error(Reason) ->
-    io_lib:format("~p", [Reason]).
+    io_lib:format("FORMAT WRROR~p", [Reason]).
 
 
 utctime() -> erlang:localtime_to_universaltime(erlang:localtime()).
 
-new_rel_vsn(Time) ->
-    {{Year,Month,Day},{Hour,Min,Sec}} = Time,
+new_rel_vsn({{Year,Month,Day},{Hour,Min,Sec}}) ->
     lists:flatten(
       io_lib:format("~4.10.0B~2.10.0B~2.10.0B.~2.10.0B~2.10.0B~2.10.0B",
         [Year, Month, Day, Hour, Min, Sec])).
 
-new_app_vsn(Time) ->
-    {{Year,Month,Day},{Hour,Min,Sec}} = Time,
+new_app_vsn({{Year,Month,Day},{Hour,Min,Sec}}) ->
     lists:flatten(
       io_lib:format("~4.10.0B~2.10.0B~2.10.0B-~2.10.0B~2.10.0B~2.10.0B-relflow",
         [Year, Month, Day, Hour, Min, Sec])).
 
 exec(Map, State) ->
+    case relflow_state:force(State) orelse relflow_git:is_clean() of
+        true -> exec_1(Map, State);
+        false -> ?PRV_ERROR(unclean_git)
+    end.
+
+exec_1(Map, State) ->
     NewRelVsn = relflow_state:nextver(State),
     case NewRelVsn > relflow_state:oldrelver(State) of
-        true  -> ok;
-        false -> throw("NewRelVsn is lower than OldRelVsn? ERRRRR")
-    end,
+        true  -> exec_2(Map, State, NewRelVsn);
+        false -> ?PRV_ERROR({relvsn_ordering, relflow_state:oldrelver(State), NewRelVsn})
+    end.
+
+exec_2(Map, State, NewRelVsn) ->
     lists:foreach(fun({_AppName, #{appup_path := Path,
                                    appup_term := T,
                                    appsrc_path := AppSrc,
@@ -97,14 +116,30 @@ exec(Map, State) ->
         fun(#{appup_path := F1, appsrc_path := F2}, Acc) ->
         [F1, F2 | Acc]
     end, ["rebar.config"], maps:values(Map)),
-    %% git things
-    exec_cmd("git add ~s", [string:join(FilesTouched, " ")]),
-    exec_cmd("git commit -m\"relflow ~s --> ~s\"", [relflow_state:oldrelver(State), NewRelVsn]),
-    exec_cmd("git tag v~s", [NewRelVsn]),
-    rebar_api:info("Now run:  git push", []).
 
-exec_cmd(S,A) ->
-    Str = lists:flatten(io_lib:format(S,A)),
-    rebar_api:info("[running] $ ~s",[Str]),
-    ok.
-    %rebar_api:info("~s",[os:cmd(Str)]).
+    %% git things
+    GitAddCmds = [ fmt("git add ~s", [AddFile]) || AddFile <- FilesTouched ],
+    GitCmds = GitAddCmds ++ [
+        %fmt("git add ~s", [string:join(FilesTouched, " ")]),
+        fmt("git commit -m\"relflow ~s --> ~s\"", [relflow_state:oldrelver(State), NewRelVsn]),
+        fmt("git tag v~s", [NewRelVsn])
+    ],
+    case relflow_state:autogit(State) of
+        true  -> exec_git(GitCmds);
+        false -> print_git(GitCmds)
+    end,
+    {ok, relflow_state:rebar_state(State)}.
+
+exec_git(Cmds) ->
+    lists:foreach(fun(Cmd) ->
+        case os:cmd(Cmd) of
+            ""  -> rebar_api:info("$ ~s", [Cmd]);
+            Res -> rebar_api:info("$ ~s\n~s", [Cmd, string:strip(Res, right)])
+        end
+    end, Cmds).
+
+print_git(Cmds) ->
+    S = iolist_to_binary([ [C, "\n"] || C <- Cmds ]),
+    rebar_api:info("Recommended git commands:\n~s", [S]).
+
+fmt(S,A) -> lists:flatten(io_lib:format(S,A)).
