@@ -2,7 +2,7 @@ relflow
 =======
 
 Relflow is a release workflow utility for erlang projects that use
-rebar3. It automates the boring bits of generating a reluppable erlang
+[rebar3](https://github.com/rebar/rebar3). It automates the boring bits of generating a reluppable erlang
 release, namely:
 
 * writes .appup files for changed applications
