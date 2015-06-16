@@ -1,26 +1,36 @@
 relflow
-=====
+=======
 
-release workflow util
+Relflow is a release workflow utility for erlang projects that use
+rebar3. It automates the boring bits of generating a reluppable erlang
+release, namely:
 
-Build
------
+* writes .appup files for changed applications
+* increments vsn field in .app and .app.src files
+* updates rebar.config with new release version (in relx section)
 
-    $ rebar3 compile
+__WARNING__ relflow modifies `.app.src`, `.appup`, and `relx.config` files in-place.
+Make sure you have committed all local modifications to git before running relflow.
+
 
 Use
 ---
 
-Add the plugin to your rebar config:
+Add the relflow plugin to your `rebar.config`:
 
-    {plugins, [
-        { relflow, ".*", {git, "git@host:user/relflow.git", {tag, "0.1.0"}}}
-    ]}.
+<pre>
+{plugins, [
+    {relflow, ".*", {git, "https://github.com/irccloud/rebar3_relflow.git", {branch, "master"}}}
+]}.
+</pre>
 
-Then just call your plugin directly in an existing application:
+
+Then:
+
+    $ rebar3 relflow --help
 
 
-    $ rebar3 relflow
-    ===> Fetching relflow
-    ===> Compiling relflow
-    <Plugin Output>
+License
+-------
+
+Apache2, same as rebar3.
