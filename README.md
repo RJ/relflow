@@ -9,6 +9,8 @@ release, namely:
 * increments vsn field in .app and .app.src files
 * updates rebar.config with new release version (in relx section)
 
+NB: i've only tested this with a rebar3 project using an `apps/` subdir.
+
 Workflow Example
 ----------------
 
@@ -41,6 +43,30 @@ Note that the `-u` param here is the erlang release vsn, not a git tag.
 (However, it is sensible to tag the release-commit with the same vsn string).
 
     $ rebar3 release relup -u "first-release"
+
+Rationale & Appup Generation
+----------------------------
+
+Existing release upgrade tools require that you have the previous release
+sitting on disk where you build the upgrade, and will typically use
+[beam_lib:cmp_dirs/2](http://www.erlang.org/doc/man/beam_lib.html#cmp_dirs-2)
+to determine which modules have changed, in order to create an appup.
+
+This is a pain, because often releases are build on a CI server remotely.
+Relflow depends on git for the list of changed modules. It uses the current
+rebar3 profile to examine BEAMs and check if they are gen_servers, supervisors, etc.
+
+The implicit assumption here is that modules don't suddenly change from being supervisors to gen_servers or anything weird. If so, the appup would be invalid and require fixing manually.
+
+For example:
+
+    $ rebar3 as prod relflow -u v12345.6789
+
+This will use `git diff v12345.6789` for a list of changed modules, and then
+check _build/prod/$relname/.. for BEAMs in order to create an appup.
+
+See [relflow_appup.erl](https://github.com/RJ/relflow/blob/master/src/relflow_appup.erl) for more details.
+In some cases, you may wish to hand-edit appups, if you have specific dependency ordering requirements.
 
 
 In-place file rewriting
