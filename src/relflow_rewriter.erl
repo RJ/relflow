@@ -17,8 +17,12 @@ set_appfile_version(Filepath, NewVsn) when is_list(Filepath) ->
 set_rebar_relx_version(Filepath, NewVsn) ->
     {ok, Bin} = file:read_file(Filepath),
     Lines = lists:map(fun binary_to_list/1, binary:split(Bin, <<"\n">>, [global])),
-    Contents = set_rebar_relx_version_1(NewVsn, Lines, false, []),
-    ok = file:write_file(Filepath, strip(Contents)).
+    case set_rebar_relx_version_1(NewVsn, Lines, false, []) of
+        {error, _} = E ->
+            E;
+        Contents ->
+            ok = file:write_file(Filepath, strip(Contents))
+    end.
 
 set_rebar_relx_version_1(NewVsn, [Line | Lines], Found, Acc) ->
     case string:str(Line, "relflow-release-version-marker") > 0 of
@@ -29,8 +33,8 @@ set_rebar_relx_version_1(NewVsn, [Line | Lines], Found, Acc) ->
             set_rebar_relx_version_1(NewVsn, Lines, Found, [Line|Acc])
     end;
 set_rebar_relx_version_1(_, [], false, _Acc) ->
-    rebar_api:error("You must have a '%% relflow-release-version-marker' line in rebar.config",[]),
-    throw(reflow_marker_missing);
+    %rebar_api:error("You must have a '%% relflow-release-version-marker' line in rebar.config",[]),
+    {error, relflow_marker_missing};
 set_rebar_relx_version_1(_, [], true, Acc) ->
     [ [Line, <<"\n">>] || Line <- lists:reverse(Acc) ].
 
