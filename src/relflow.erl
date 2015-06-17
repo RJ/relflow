@@ -20,9 +20,20 @@ init(State) ->
             {example, "rebar3 relflow"}, % How to use the plugin
             {opts, opts()},                   % list of options understood by the plugin
             {short_desc, "release workflow util"},
-            {desc, "release workflow util"}
+            {desc, desc()}
     ]),
     {ok, rebar_state:add_provider(State, Provider)}.
+
+desc() -> "
+Relflow
+=======
+
+Examples:
+    rebar3 relflow -u v1.2.3        # upgrade from last release, at git tag v1.2.3
+    rebar3 relflow init-versions    # reset all vsns using relflow format
+    rebar3 relflow --version        # print relflow version
+
+".
 
 opts() ->
     [
@@ -33,21 +44,35 @@ opts() ->
      {autogit, $g, "autogit", {boolean, true},
       "Automatically add and commit relflow changes to git"},
      {force, $f, "force", {boolean, false},
-      "Force relflow to run even with uncommitted local changes"}
+      "Force relflow to run even with uncommitted local changes"},
+     {version, $v, "version", undefined,
+      "Print relflow version and exit"}
     ].
 
--spec do(rebar_state:t()) -> {ok, rebar_state:t()} | {error, string()}.
+relflow_version() ->
+    {ok, V} = application:get_key(relflow, vsn),
+    V.
+
 do(RebarState) ->
     Time = utctime(),
     State0 = relflow_state:set_default_nextver(new_rel_vsn(Time),
               relflow_state:nextappver(new_app_vsn(Time),
                relflow_state:new(RebarState))),
 
-    case relflow_state:task(State0) of
+    case relflow_state:version(State0) of
         undefined ->
-            do_1(State0);
-        "reset-versions" ->
-            do_reset_versions(State0)
+            do_0(State0);
+        _ ->
+            io:format("~s\n",[relflow_version()]),
+            {ok, RebarState}
+    end.
+
+do_0(State) ->
+    case relflow_state:task(State) of
+        undefined ->
+            do_1(State);
+        "init-versions" ->
+            do_init_versions(State)
     end.
 
 do_1(State0) ->
@@ -70,7 +95,7 @@ do_2(State) ->
     ChangeMap       = relflow_appup:generate_appups(ChangesSinceRev, State),
     exec(ChangeMap, State, fun(A,B) -> exec_1(A,B,fun exec_2/3) end).
 
-do_reset_versions(State0) ->
+do_init_versions(State0) ->
     NextAppVer = relflow_state:nextappver(State0),
     rebar_api:info("New application vsn: ~s", [NextAppVer]),
     BumperFun = fun(_Map, State, NewRelVsn) ->

@@ -13,6 +13,7 @@
 -export([
     new/1,
     task/1,
+    version/1,
     relname/1,
     build_dir/1,
     upfrom/1,
@@ -31,6 +32,8 @@
 new(RebarSt) -> #relflow_st{rebar_state = RebarSt}.
 
 task(State) -> parg(task, State).
+
+version(State) -> parg(version, State).
 
 rebar_state(#relflow_st{rebar_state = R}) -> R.
 

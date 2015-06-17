@@ -9,6 +9,39 @@ release, namely:
 * increments vsn field in .app and .app.src files
 * updates rebar.config with new release version (in relx section)
 
+Workflow Example
+----------------
+
+You've shipped your first release to production. Probably built using
+`rebar3 release` (which relies on `relx` internally).
+
+You tagged your git repo with `first-release` when you shipped the release.
+
+Meanwhile, back in your dev environment, you make a bunch of changes and
+fix some bugs. You test your changes, and commit them to git.
+
+Now it's time to ship an update. Here's what you need to
+do before building a new release:
+
+* For any apps with added/removed/changed modules, increment the `vsn`
+  field in `.app.src`, and write a suitable `.appup` file to migrate upwards.
+* Increment the release version in the relx section of `rebar.config`
+
+This is what `relflow` does, so run:
+
+    $ rebar3 relflow -u "first-release"
+
+By default, this will tag and commit the resulting changes to git for
+you. To see what it did:
+
+    $ git diff HEAD~1  # view diff for last commit
+
+Now you can build the (upgradable) release for the second version.
+Note that the `-u` param here is the erlang release vsn, not a git tag.
+(However, it is sensible to tag the release-commit with the same vsn string).
+
+    $ rebar3 release relup -u "first-release"
+
 
 In-place file rewriting
 -----------------------
@@ -54,14 +87,37 @@ Add the relflow plugin to your `rebar.config`:
 
 <pre>
 {plugins, [
-    {relflow, ".*", {git, "https://github.com/irccloud/rebar3_relflow.git", {branch, "master"}}}
+    {relflow, ".*", {git, "https://github.com/RJ/relflow.git", {branch, "master"}}}
 ]}.
 </pre>
 
 
-Then:
+Help
+----
 
     $ rebar3 help relflow
+
+    Relflow
+    =======
+
+    Examples:
+        rebar3 relflow -u v1.2.3        # upgrade from last release, at git tag v1.2.3
+        rebar3 relflow init-versions    # reset all vsns using relflow format
+        rebar3 relflow --version        # print relflow version
+
+
+    Usage: rebar3 relflow [-u <upfrom>] [-x [<nextver>]] [-g [<autogit>]]
+                          [-f [<force>]]
+
+      -u, --upfrom       Git revision/tag to upgrade from (for appup
+                         generation)
+      -x, --nextversion  The version string to use for the next release
+                         [default: auto]
+      -g, --autogit      Automatically add and commit relflow changes to git
+                         [default: true]
+      -f, --force        Force relflow to run even with uncommitted local
+                         changes [default: false]
+      -v, --version      Print relflow version and exit
 
 
 License
