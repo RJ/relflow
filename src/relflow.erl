@@ -119,11 +119,13 @@ do_init_versions(State0) ->
     exec(Changes, State0, fun(A,B) -> exec_1(A,B,BumperFun) end).
 
 format_error(relflow_marker_missing) ->
-    "You must have a '%% relflow-release-version-marker' line in rebar.config (see README)";
+    "You must have a '%% relflow-release-version-marker' line in rebar.config\n     " ++
+    "See the README at github.com/RJ/relflow";
 format_error(unclean_git) ->
-    "Relflow modifies files in-place. Will not run with uncommitted changes. See 'git status'.";
+    "Relflow modifies files in-place. Will not run with uncommitted changes.";
 format_error(no_upfrom) ->
-    "You must provide a git revision to upgrade from, eg: rebar3 relflow -u abc123";
+    "Missing git revision to upgrade from, eg: rebar3 relflow -u abc123\n     " ++
+    "(or try: rebar3 help relflow)";
 format_error({relvsn_ordering, Old, New}) ->
     io_lib:format("New release vsn is less than old! (new:~s < old:~s)", [New, Old]);
 format_error(Reason) ->

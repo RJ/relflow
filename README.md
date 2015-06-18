@@ -9,7 +9,8 @@ release, namely:
 * increments vsn field in .app and .app.src files
 * updates rebar.config with new release version (in relx section)
 
-NB: i've only tested this with a rebar3 project using an `apps/` subdir.
+NB: i've only tested this with standard rebar3 layouts using `apps/` or
+`src/` dirs in the project root.
 
 Workflow Example
 ----------------
