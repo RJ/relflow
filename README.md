@@ -73,13 +73,13 @@ In some cases, you may wish to hand-edit appups, if you have specific dependency
 In-place file rewriting
 -----------------------
 
-relflow modifies `.app.src`, `.appup`, and `rebar.config` files in-place.
+relflow modifies `.app.src` and `rebar.config` files in-place.
 Make sure you have committed all local modifications to git before running relflow.
 
-`.appup` and `.app.src` files are `file:consult`ed, then written out
+`.app.src` files are `file:consult`ed, then written out
 using `io_lib:format` so you lose formatting and comments from them.
 
-`rebar.config` is carefully parsed and rewritten to preserve comments
+`rebar.config` is parsed by line and rewritten to preserve comments
 and whitespace, so you need to format the version like this:
 
     %% somewhere in rebar.config:
