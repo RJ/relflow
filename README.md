@@ -6,7 +6,7 @@ Relflow is a release workflow utility for erlang projects that use git and
 release, namely:
 
 * writes .appup files for changed applications
-* increments vsn field in .app and .app.src files
+* increments vsn field in .app.src files
 * updates rebar.config with new release version (in relx section)
 
 NB: i've only tested this with standard rebar3 layouts using `apps/` or
