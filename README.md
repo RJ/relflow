@@ -163,6 +163,8 @@ Other release / appup generation tools I encountered:
 * https://github.com/davisp/knit (Erlang)
 * https://github.com/bitwalker/exrm (Elixir)
 
+Knit has some nifty [module attributes](https://github.com/davisp/knit#knit-module-attributes) to guide the appup creation (module precedence, dependencies, etc). Warrants further study/copying.
+
 Did I miss any? Let me know!
 
 Contact
