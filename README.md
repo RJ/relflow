@@ -151,3 +151,23 @@ License
 -------
 
 Apache2, same as rebar3.
+
+Research
+--------
+
+Other release / appup generation tools I encountered:
+
+* http://dukesoferl.blogspot.co.uk/2009/05/automatic-appup-file-generation.html (Erlang)
+* rebar2 'generate-appups' https://github.com/rebar/rebar/wiki/Upgrades (Erlang)
+* https://github.com/boldpoker/edeliver (Erlang)
+* https://github.com/davisp/knit (Erlang)
+* https://github.com/bitwalker/exrm (Elixir)
+
+Did I miss any? Let me know!
+
+Contact
+-------
+
+* RJ2 on freenode
+* metabrew on twitter
+* rj@metabrew.com
