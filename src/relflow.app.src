@@ -6,9 +6,9 @@
    [kernel,
     stdlib
    ]},
-  {contributors, ["Richard Jones"]},
+  {contributors, ["Richard Jones <rj@metabrew.com>"]},
   {licenses, ["Apache"]},
-  {links, [{"Github", "https://github.com/RJ/relflow"}]},
+  {links, [{"github.com/RJ/relflow", "https://github.com/RJ/relflow"}]},
   {env,[]},
   {modules, []}
  ]}.
