@@ -1,11 +1,14 @@
 {application, 'relflow',
- [{description, "release workflow util"},
-  {vsn, "1.0"},
+ [{description, "Rebar3 release workflow plugin"},
+  {vsn, "1.0.0"},
   {registered, []},
   {applications,
    [kernel,
     stdlib
    ]},
+  {contributors, ["Richard Jones"]},
+  {licenses, ["Apache"]},
+  {links, [{"Github", "https://github.com/RJ/relflow"}]},
   {env,[]},
   {modules, []}
  ]}.
