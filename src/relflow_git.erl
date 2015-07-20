@@ -48,10 +48,7 @@ add_app_paths(Changes) ->
      ).
 
 since_revision(Rev) when is_list(Rev) ->
-    gather_changed_modules(
-      lists:sort(
-          changed_modules_since(
-            Rev))).
+    gather_changed_modules(changed_modules_since(Rev)).
 
 
 appver_at_revision(Rev, Name, DirType) ->
@@ -98,7 +95,7 @@ git_status_to_atom("A") -> added;
 git_status_to_atom(_)   -> modified.
 
 changed_modules_since(Rev) when is_list(Rev) ->
-    lists:map(fun(Line) ->
+    lists:sort(lists:flatten(lists:map(fun(Line) ->
         case string:tokens(Line, "\t") of
             [Status, Path] ->
                 StatusAtom = git_status_to_atom(Status),
@@ -110,6 +107,12 @@ changed_modules_since(Rev) when is_list(Rev) ->
                 %% directories where OTP applications for the project can be located
                 %% {project_app_dirs, ["apps", "lib", "."]}.
                 case filename:split(Path) of
+                    ["apps", _, "test" | _] ->
+                        [];
+
+                    ["test" | _] ->
+                        [];
+
                     ["apps", AppName, "src" | _] ->
                         {AppName, Module, ModInfo};
 
@@ -124,7 +127,7 @@ changed_modules_since(Rev) when is_list(Rev) ->
         end
         end,
         git_diff_names(Rev)
-    ).
+    ))).
 
 gather_changed_modules(List) ->
     lists:foldl(fun({AppStr, Changes}, Acc) ->
