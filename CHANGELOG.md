@@ -1,5 +1,9 @@
 Things pushed to hex.pm:
 
+## 1.0.2
+
+strip trailing whitespace from rebar.config properly
+
 ## 1.0.1
 
 ignore changed modules from ./apps/*/test and ./test/

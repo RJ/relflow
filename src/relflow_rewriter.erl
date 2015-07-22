@@ -38,7 +38,22 @@ set_rebar_relx_version_1(_, [], false, _Acc) ->
 set_rebar_relx_version_1(_, [], true, Acc) ->
     [ [Line, <<"\n">>] || Line <- lists:reverse(Acc) ].
 
-strip(IO) ->
-    S = binary_to_list(iolist_to_binary([IO])),
-    string:strip(S).
+strip(<<>>) ->
+    <<>>;
+strip(B) when is_list(B) ->
+    strip(iolist_to_binary(B));
+strip(B) when is_binary(B) ->
+    LastChar = binary:last(B),
+    case whitespace(LastChar) of
+        false ->
+            B;
+        true ->
+            strip(binary:part(B, 0, size(B)-1))
+    end.
+
+whitespace($ )  -> true;
+whitespace($\t) -> true;
+whitespace($\r) -> true;
+whitespace($\n) -> true;
+whitespace(_)   -> false.
 
