@@ -21,7 +21,7 @@ set_rebar_relx_version(Filepath, NewVsn) ->
         {error, _} = E ->
             E;
         Contents ->
-            ok = file:write_file(Filepath, strip(Contents))
+            ok = file:write_file(Filepath, [strip(Contents), <<"\n">>])
     end.
 
 set_rebar_relx_version_1(NewVsn, [Line | Lines], Found, Acc) ->
