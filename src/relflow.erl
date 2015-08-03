@@ -182,7 +182,7 @@ exec_2(Map, State, NewRelVsn) ->
     GitCmds = GitAddCmds ++ [
         %fmt("git add ~s", [string:join(FilesTouched, " ")]),
         fmt("git commit -m\"relflow ~s --> ~s\"", [relflow_state:oldrelver(State), NewRelVsn]),
-        fmt("git tag v~s", [NewRelVsn])
+        fmt("git tag -a \"v~s\" -m \"~s\"", [NewRelVsn, NewRelVsn])
     ],
     case {relflow_state:autogit(State), relflow_state:force(State)} of
         {true, false}  -> exec_git(GitCmds);

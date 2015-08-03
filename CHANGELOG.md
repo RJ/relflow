@@ -1,5 +1,9 @@
 Things pushed to hex.pm:
 
+## 1.0.4
+
+make an annotated tag, so --follow-tags (git 2.4+) works
+
 ## 1.0.3
 
 ensure exactly one \n at the end of rebar.config
