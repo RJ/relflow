@@ -29,7 +29,7 @@ Relflow
 =======
 
 Examples:
-    rebar3 relflow -u v1.2.3        # upgrade from last release, at git tag v1.2.3
+    rebar3 relflow -u v1.2.3        # upgrade from last release, at tag v1.2.3
     rebar3 relflow init-versions    # reset all vsns using relflow format
     rebar3 relflow --version        # print relflow version
 
@@ -38,15 +38,16 @@ Examples:
 opts() ->
     [
      {upfrom, $u, "upfrom", string,
-      "Git revision/tag to upgrade from (for appup generation)"},
+      "Revision/tag to upgrade from (for appup generation)"},
      {nextver, $x, "nextversion", {string, "auto"},
       "The version string to use for the next release"},
-     {autogit, $g, "autogit", {boolean, true},
-      "Automatically add and commit relflow changes to git"},
+     {autocommit, $g, "autocommit", {boolean, true},
+      "Automatically add and commit relflow changes to sccm"},
      {force, $f, "force", {boolean, false},
       "Force relflow to run even with uncommitted local changes"},
      {version, $v, "version", undefined,
-      "Print relflow version and exit"}
+      "Print relflow version and exit"},
+     {sccm, $s, "sccm", {string, "git"}, "specify SCCM tool to use, either git or hg."}
     ].
 
 relflow_version() ->
@@ -72,7 +73,9 @@ do_0(State) ->
         undefined ->
             do_1(State);
         "init-versions" ->
-            do_init_versions(State)
+            do_init_versions(State);
+      X -> ?PRV_ERROR({unknown_cmd, X})
+
     end.
 
 do_1(State0) ->
@@ -80,7 +83,7 @@ do_1(State0) ->
         undefined ->
             ?PRV_ERROR(no_upfrom);
         Rev ->
-            OldRelVer = relflow_git:relver_at(Rev),
+            OldRelVer = relflow_sccm:relver_at(Rev, relflow_state:sccm(State0)),
             State = relflow_state:oldrelver(OldRelVer, State0),
             do_2(State)
     end.
@@ -91,7 +94,7 @@ do_2(State) ->
                         relflow_state:nextver(State)]),
     rebar_api:debug("bumped applications will use vsn: ~s", [
                         relflow_state:nextappver(State)]),
-    ChangesSinceRev = relflow_git:since(relflow_state:upfrom(State)),
+    ChangesSinceRev = relflow_sccm:since(relflow_state:upfrom(State), relflow_state:sccm(State)),
     ChangeMap       = relflow_appup:generate_appups(ChangesSinceRev, State),
     exec(ChangeMap, State, fun(A,B) -> exec_1(A,B,fun exec_2/3) end).
 
@@ -121,11 +124,12 @@ do_init_versions(State0) ->
 format_error(relflow_marker_missing) ->
     "You must have a '%% relflow-release-version-marker' line in rebar.config\n     " ++
     "See the README at github.com/RJ/relflow";
-format_error(unclean_git) ->
+format_error(unclean) ->
     "Relflow modifies files in-place. Will not run with uncommitted changes.";
 format_error(no_upfrom) ->
-    "Missing git revision to upgrade from, eg: rebar3 relflow -u abc123\n     " ++
+    "Missing revision to upgrade from, eg: rebar3 relflow -u abc123\n     " ++
     "(or try: rebar3 help relflow)";
+format_error({unknown_cmd, Cmd}) -> io_lib:format("Unknown command \"~s\". Try \"rebar3 help relflow\"", [Cmd]);
 format_error({relvsn_ordering, Old, New}) ->
     io_lib:format("New release vsn is less than old! (new:~s < old:~s)", [New, Old]);
 format_error(Reason) ->
@@ -145,9 +149,9 @@ new_app_vsn({{Year,Month,Day},{Hour,Min,Sec}}) ->
         [Year, Month, Day, Hour, Min, Sec])).
 
 exec(Map, State, Next) ->
-    case relflow_state:force(State) orelse relflow_git:is_clean() of
+  case relflow_state:force(State) orelse relflow_sccm:is_clean(relflow_state:sccm(State)) of
         true -> Next(Map, State);
-        false -> ?PRV_ERROR(unclean_git)
+        false -> ?PRV_ERROR(unclean)
     end.
 
 exec_1(Map, State, Next) ->
@@ -177,33 +181,11 @@ exec_2(Map, State, NewRelVsn) ->
         [F1, F2 | Acc]
     end, ["rebar.config"], maps:values(Map)),
 
-    %% git things
-    GitAddCmds = [ fmt("git add ~s", [AddFile]) || AddFile <- FilesTouched ],
-    GitCmds = GitAddCmds ++ [
-        %fmt("git add ~s", [string:join(FilesTouched, " ")]),
-        fmt("git commit -m\"relflow ~s --> ~s\"", [relflow_state:oldrelver(State), NewRelVsn]),
-        fmt("git tag -a \"v~s\" -m \"~s\"", [NewRelVsn, NewRelVsn])
-    ],
-    case {relflow_state:autogit(State), relflow_state:force(State)} of
-        {true, false}  -> exec_git(GitCmds);
-        {false, true}  -> exec_git(GitCmds);
-        {false, false} -> print_git(GitCmds);
-        {true, true}   ->
-            rebar_api:warn("Not running git commands, because you --forced",[]),
-            print_git(GitCmds)
-    end,
+    relflow_sccm:commit(FilesTouched, 
+                        relflow_state:sccm(State), 
+                        relflow_state:autocommit(State), 
+                        relflow_state:force(State),
+                        relflow_state:oldrelver(State),
+                         NewRelVsn),
     {ok, relflow_state:rebar_state(State)}.
 
-exec_git(Cmds) ->
-    lists:foreach(fun(Cmd) ->
-        case os:cmd(Cmd) of
-            ""  -> rebar_api:info("$ ~s", [Cmd]);
-            Res -> rebar_api:info("$ ~s\n~s", [Cmd, string:strip(Res, right)])
-        end
-    end, Cmds).
-
-print_git(Cmds) ->
-    S = iolist_to_binary([ [C, "\n"] || C <- Cmds ]),
-    rebar_api:info("Recommended git commands:\n~s", [S]).
-
-fmt(S,A) -> lists:flatten(io_lib:format(S,A)).
