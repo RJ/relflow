@@ -34,6 +34,9 @@ generate_appup(AppName, AppMap = #{changes := Changes, vsn := Vsn}, State) ->
     maps:put(appup_instructions, SortedInstructions, AppMap2).
 
 
+module_instructions('$appmeta', _, _) ->
+    [];
+
 module_instructions(Mod, #{status := added}, _Ctx) ->
     [{add_module, Mod}];
 

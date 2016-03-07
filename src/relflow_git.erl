@@ -85,7 +85,7 @@ eval(S) ->
     Term.
 
 git_diff_names(Rev) when is_list(Rev) ->
-    Cmd = "git diff --name-status "++Rev++" | grep -E '\.erl$' | grep -E \"\t(apps|src)\"",
+    Cmd = "git diff --name-status "++Rev++" | grep -E '\.(erl|hrl|src)$' | grep -E \"\t(apps|src)\"",
     Lines = string:tokens(os:cmd(Cmd), "\n"),
     %io:format("LINES: ~s\n~s\n",[Cmd,Lines]),
     Lines.
@@ -99,7 +99,22 @@ changed_modules_since(Rev) when is_list(Rev) ->
         case string:tokens(Line, "\t") of
             [Status, Path] ->
                 StatusAtom = git_status_to_atom(Status),
-                Module = list_to_atom(filename:basename(Path, ".erl")),
+                %% Module is usually the module name, for use in the .appup
+                %% If the change is to a .hrl or .app.src, we don't necessarily
+                %% need an appup instruction. We emit $appmeta here, indicating
+                %% we should just bump the app version with no special appup instructions needed.
+                Module = case filename:extension(Path) of
+                    ".erl" -> list_to_atom(filename:basename(Path, ".erl"));
+                    ".hrl" -> rebar_api:warn("WARNING: ~s changed, relflow doesn't deduce which .erls use it\n", [Path]),
+                              %% you better make a whitespace change or something, to
+                              %% any erl files that -include() this hrl. Otherwise relflow
+                              %% won't generate an appup instruction for them.
+                              %% This is considered a bug. Could be fixed in a nasty way
+                              %% by grepping for include statements in erl files :)
+                              '$appmeta';
+                    ".src" -> %% .app.src
+                              '$appmeta'
+                end,
                 ModInfo = #{status => StatusAtom, path => Path},
                 %% This depends on unchanged rebar3 defaults for source locations,
                 %% but we only support apps/ and src/
@@ -145,10 +160,10 @@ gather_changed_modules(List) ->
         gather_changed_modules(List, [])
     ).
 
-gather_changed_modules([{AppName, Filename, ModInfo} | Rest], [{AppName,Changes} | AccRest]) ->
-    gather_changed_modules(Rest, [{AppName, [{Filename, ModInfo}|Changes]}|AccRest]);
-gather_changed_modules([{AppName, Filename, ModInfo} | Rest], Acc) ->
-    gather_changed_modules(Rest, [{AppName, [{Filename, ModInfo}]}|Acc]);
+gather_changed_modules([{AppName, Module, ModInfo} | Rest], [{AppName,Changes} | AccRest]) ->
+    gather_changed_modules(Rest, [{AppName, [{Module, ModInfo}|Changes]}|AccRest]);
+gather_changed_modules([{AppName, Module, ModInfo} | Rest], Acc) ->
+    gather_changed_modules(Rest, [{AppName, [{Module, ModInfo}]}|Acc]);
 gather_changed_modules([], Acc) ->
     Acc.
 
