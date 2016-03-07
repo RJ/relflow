@@ -1,5 +1,10 @@
 Things pushed to hex.pm:
 
+## 1.0.5
+
+Make sure to bump app version if the .app.src or .hrl file changes, even
+if no .erl files have changed.
+
 ## 1.0.4
 
 make an annotated tag, so --follow-tags (git 2.4+) works
