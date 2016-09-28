@@ -60,7 +60,11 @@ module_instructions(Mod, #{status := modified}, #{vsn := FromVer, next_vsn := To
                 false ->
                     [{load_module, Mod}];
                 true ->
-                    [{update, Mod, {advanced, {FromVer, ToVer, []}}}]
+                    %[{update, Mod, {advanced, {FromVer, ToVer, []}}}]
+                    %
+                    % Default to load_module, since we usually don't
+                    % make state changes that require a code_change
+                    [{load_module, Mod}]
             end
     end
     ++
