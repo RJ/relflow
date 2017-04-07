@@ -134,7 +134,11 @@ changed_modules_since(Rev) when is_list(Rev) ->
                     ["src" | _] ->
                         %% we lookup the app name at the end, during gathering:
                         AppName = "$$single_app",
-                        {AppName, Module, ModInfo}
+                        {AppName, Module, ModInfo};
+
+                    %% assume that any other path isn't relevant to relup stuff: 
+                    _ ->
+                        []
                 end;
             _Else ->
                 io:format("git error: ~s\n",[Line]),
