@@ -160,14 +160,20 @@ exec_1(Map, State, Next) ->
 	end.
 
 greater_than([NewMajor, ".", NewMinor, ".", NewPatch], [OldMajor, ".", OldMinor, ".", OldPatch]) ->
+	NewMajorAsInt = string:to_integer(NewMajor),
+	NewMinorAsInt = string:to_integer(NewMinor),
+	NewPatchAsInt = string:to_integer(NewPatch),
+	OldMajorAsInt = string:to_integer(OldMajor),
+	OldMinorAsInt = string:to_integer(OldMinor),
+	OldPatchAsInt = string:to_integer(OldPatch),
 	if 
-		NewMajor > OldMajor -> true;
-		NewMajor < OldMajor -> false;
-		NewMajor == OldMajor ->
+		NewMajorAsInt > OldMajorAsInt -> true;
+		NewMajorAsInt < OldMajorAsInt -> false;
+		NewMajorAsInt == OldMajorAsInt ->
 			if 
-				NewMinor > OldMinor -> true;
-				NewMinor < OldMinor -> false;
-				NewMinor == OldMinor -> NewPatch > OldPatch
+				NewMinorAsInt > OldMinorAsInt -> true;
+				NewMinorAsInt < OldMinorAsInt -> false;
+				NewMinorAsInt == OldMinorAsInt -> NewPatchAsInt > OldPatchAsInt
 			end
 	end;
 
