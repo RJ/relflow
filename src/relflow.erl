@@ -155,34 +155,26 @@ exec(Map, State, Next) ->
 exec_1(Map, State, Next) ->
     NewRelVsn = relflow_state:nextver(State),
     OldRelVsn = relflow_state:oldrelver(State),
-    case greater_than(NewRelVsn, OldRelVsn, State) of
+    case greater_than(NewRelVsn, OldRelVsn, relflow_state:semver(State)) of
         true  -> Next(Map, State, NewRelVsn);
         false -> ?PRV_ERROR({relvsn_ordering, OldRelVsn, NewRelVsn})
     end.
 
-greater_than(NewVersion, OldVersion, State) ->
-    case relflow_state:semver(State) of
-        true ->
-            [NewMajor, NewMinor, NewPatch] = string:tokens(NewVersion, "."),
-            [OldMajor, OldMinor, OldPatch] = string:tokens(OldVersion, "."),
-            NewMajorAsInt = string:to_integer(NewMajor),
-            NewMinorAsInt = string:to_integer(NewMinor),
-            NewPatchAsInt = string:to_integer(NewPatch),
-            OldMajorAsInt = string:to_integer(OldMajor),
-            OldMinorAsInt = string:to_integer(OldMinor),
-            OldPatchAsInt = string:to_integer(OldPatch),
+greater_than(NewVersion, OldVersion, true) ->
+    [NewMajor, NewMinor, NewPatch] = lists:map(fun string:to_integer/1, string:tokens(NewVersion, ".")),
+    [OldMajor, OldMinor, OldPatch] = lists:map(fun string:to_integer/1, string:tokens(OldVersion, ".")),
+    if 
+        NewMajor > OldMajor -> true;
+        NewMajor < OldMajor -> false;
+        NewMajor == OldMajor ->
             if 
-                NewMajorAsInt > OldMajorAsInt -> true;
-                NewMajorAsInt < OldMajorAsInt -> false;
-                NewMajorAsInt == OldMajorAsInt ->
-                    if 
-                        NewMinorAsInt > OldMinorAsInt -> true;
-                        NewMinorAsInt < OldMinorAsInt -> false;
-                        NewMinorAsInt == OldMinorAsInt -> NewPatchAsInt > OldPatchAsInt
-                    end
-            end;
-        false -> NewVersion > OldVersion
-    end.
+                NewMinor > OldMinor -> true;
+                NewMinor < OldMinor -> false;
+                NewMinor == OldMinor -> NewPatch > OldPatch
+            end
+    end;
+greater_than(NewVersion, OldVersion, _UsingSemanticVersion) -> NewVersion > OldVersion.
+
 
 exec_2(Map, State, NewRelVsn) ->
     lists:foreach(fun({_AppName, #{appup_path := Path,
