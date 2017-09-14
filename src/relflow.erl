@@ -163,8 +163,8 @@ exec_1(Map, State, Next) ->
 greater_than(NewVersion, OldVersion, State) ->
 	case relflow_state:semver(State) of
 		true ->
-			[NewMajor, NewMinor, NewPatch] = string:split(NewVersion, "."),
-			[OldMajor, OldMinor, OldPatch] = string:split(OldVersion, "."),
+			[NewMajor, NewMinor, NewPatch] = string:tokens(NewVersion, "."),
+			[OldMajor, OldMinor, OldPatch] = string:tokens(OldVersion, "."),
 			NewMajorAsInt = string:to_integer(NewMajor),
 			NewMinorAsInt = string:to_integer(NewMinor),
 			NewPatchAsInt = string:to_integer(NewPatch),
