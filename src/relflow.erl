@@ -154,31 +154,35 @@ exec(Map, State, Next) ->
 
 exec_1(Map, State, Next) ->
 	NewRelVsn = relflow_state:nextver(State),
-	case greater_than(NewRelVsn, relflow_state:oldrelver(State)) of
+	OldRelVsn = relflow_state:oldrelver(State),
+	case greater_than(NewRelVsn, OldRelVsn, State) of
 		true  -> Next(Map, State, NewRelVsn);
-		false -> ?PRV_ERROR({relvsn_ordering, relflow_state:oldrelver(State), NewRelVsn})
+		false -> ?PRV_ERROR({relvsn_ordering, OldRelVsn, NewRelVsn})
 	end.
 
-greater_than([NewMajor, ".", NewMinor, ".", NewPatch], [OldMajor, ".", OldMinor, ".", OldPatch]) ->
-	NewMajorAsInt = string:to_integer(NewMajor),
-	NewMinorAsInt = string:to_integer(NewMinor),
-	NewPatchAsInt = string:to_integer(NewPatch),
-	OldMajorAsInt = string:to_integer(OldMajor),
-	OldMinorAsInt = string:to_integer(OldMinor),
-	OldPatchAsInt = string:to_integer(OldPatch),
-	if 
-		NewMajorAsInt > OldMajorAsInt -> true;
-		NewMajorAsInt < OldMajorAsInt -> false;
-		NewMajorAsInt == OldMajorAsInt ->
+greater_than(NewVersion, OldVersion, State) ->
+	case relflow_state:semver(State) of
+		true ->
+			[NewMajor, NewMinor, NewPatch] = string:split(NewVersion, "."),
+			[OldMajor, OldMinor, OldPatch] = string:split(OldVersion, "."),
+			NewMajorAsInt = string:to_integer(NewMajor),
+			NewMinorAsInt = string:to_integer(NewMinor),
+			NewPatchAsInt = string:to_integer(NewPatch),
+			OldMajorAsInt = string:to_integer(OldMajor),
+			OldMinorAsInt = string:to_integer(OldMinor),
+			OldPatchAsInt = string:to_integer(OldPatch),
 			if 
-				NewMinorAsInt > OldMinorAsInt -> true;
-				NewMinorAsInt < OldMinorAsInt -> false;
-				NewMinorAsInt == OldMinorAsInt -> NewPatchAsInt > OldPatchAsInt
-			end
-	end;
-
-
-greater_than(NewVersion, OldVersion) ->	NewVersion > OldVersion.
+				NewMajorAsInt > OldMajorAsInt -> true;
+				NewMajorAsInt < OldMajorAsInt -> false;
+				NewMajorAsInt == OldMajorAsInt ->
+					if 
+						NewMinorAsInt > OldMinorAsInt -> true;
+						NewMinorAsInt < OldMinorAsInt -> false;
+						NewMinorAsInt == OldMinorAsInt -> NewPatchAsInt > OldPatchAsInt
+					end
+			end;
+		false -> NewVersion > OldVersion
+	end.
 
 exec_2(Map, State, NewRelVsn) ->
 	lists:foreach(fun({_AppName, #{appup_path := Path,
