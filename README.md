@@ -134,7 +134,7 @@ Help
 
 
     Usage: rebar3 relflow [-u <upfrom>] [-x [<nextver>]] [-g [<autogit>]]
-                          [-f [<force>]]
+                          [-f [<force>]] [-s [semver]]
 
       -u, --upfrom       Git revision/tag to upgrade from (for appup
                          generation)
@@ -144,8 +144,9 @@ Help
                          [default: true]
       -f, --force        Force relflow to run even with uncommitted local
                          changes [default: false]
+      -s, --semver       Compare the versions as semantic versions (0.0.9 < 0.0.10)
+                         [default: false]
       -v, --version      Print relflow version and exit
-
 
 License
 -------

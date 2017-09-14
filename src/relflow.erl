@@ -173,7 +173,7 @@ greater_than(NewVersion, OldVersion, true) ->
                 NewMinor == OldMinor -> NewPatch > OldPatch
             end
     end;
-greater_than(NewVersion, OldVersion, _UsingSemanticVersion) -> NewVersion > OldVersion.
+greater_than(NewVersion, OldVersion, false) -> NewVersion > OldVersion.
 
 
 exec_2(Map, State, NewRelVsn) ->
