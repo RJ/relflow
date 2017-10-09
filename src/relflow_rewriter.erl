@@ -6,13 +6,19 @@
 
 set_appfile_version(Filepath, NewVsn) when is_list(Filepath) ->
     rebar_api:info("Rewriting vsn in ~s",[ filename:basename(Filepath)]),
-    {ok, [{application, AppName, Sections}]} = file:consult(Filepath),
-    Vsn = proplists:get_value(vsn, Sections),  %% don't need to know previous vsn
-    NewSections = [{vsn, NewVsn} | proplists:delete(vsn, Sections)],
-    Contents = io_lib:format("~s\n~p.~n",[?AppHeader, {application, AppName, NewSections}]),
-    ok = file:write_file(Filepath, Contents),
-    rebar_api:debug("Vsn changed from ~s --> ~s in: ~s",[Vsn, NewVsn, Filepath]),
-    ok.
+    case file:consult(Filepath) of
+        {error, enoent} -> %% app removed in this version?
+            rebar_api:info("Missing app file for '~s' - presumed deleted in this version", [filename:basename(Filepath, ".app.src")]),
+            ok;
+
+        {ok, [{application, AppName, Sections}]} ->
+            Vsn = proplists:get_value(vsn, Sections),  %% don't need to know previous vsn
+            NewSections = [{vsn, NewVsn} | proplists:delete(vsn, Sections)],
+            Contents = io_lib:format("~s\n~p.~n",[?AppHeader, {application, AppName, NewSections}]),
+            ok = file:write_file(Filepath, Contents),
+            rebar_api:debug("Vsn changed from ~s --> ~s in: ~s",[Vsn, NewVsn, Filepath]),
+            ok
+    end.
 
 set_rebar_relx_version(Filepath, NewVsn) ->
     {ok, Bin} = file:read_file(Filepath),
