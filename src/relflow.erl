@@ -46,7 +46,9 @@ opts() ->
      {force, $f, "force", {boolean, false},
       "Force relflow to run even with uncommitted local changes"},
      {version, $v, "version", undefined,
-      "Print relflow version and exit"}
+      "Print relflow version and exit"},
+     {semver, $s, "semver", {boolean, false},
+      "Uses semantic versioning to compare versions"}
     ].
 
 relflow_version() ->
@@ -152,10 +154,27 @@ exec(Map, State, Next) ->
 
 exec_1(Map, State, Next) ->
     NewRelVsn = relflow_state:nextver(State),
-    case NewRelVsn > relflow_state:oldrelver(State) of
+    OldRelVsn = relflow_state:oldrelver(State),
+    case greater_than(NewRelVsn, OldRelVsn, relflow_state:semver(State)) of
         true  -> Next(Map, State, NewRelVsn);
-        false -> ?PRV_ERROR({relvsn_ordering, relflow_state:oldrelver(State), NewRelVsn})
+        false -> ?PRV_ERROR({relvsn_ordering, OldRelVsn, NewRelVsn})
     end.
+
+greater_than(NewVersion, OldVersion, true) ->
+    [NewMajor, NewMinor, NewPatch] = lists:map(fun string:to_integer/1, string:tokens(NewVersion, ".")),
+    [OldMajor, OldMinor, OldPatch] = lists:map(fun string:to_integer/1, string:tokens(OldVersion, ".")),
+    if 
+        NewMajor > OldMajor -> true;
+        NewMajor < OldMajor -> false;
+        NewMajor == OldMajor ->
+            if 
+                NewMinor > OldMinor -> true;
+                NewMinor < OldMinor -> false;
+                NewMinor == OldMinor -> NewPatch > OldPatch
+            end
+    end;
+greater_than(NewVersion, OldVersion, false) -> NewVersion > OldVersion.
+
 
 exec_2(Map, State, NewRelVsn) ->
     lists:foreach(fun({_AppName, #{appup_path := Path,

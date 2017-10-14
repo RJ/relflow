@@ -20,6 +20,7 @@
     profile/1,
     force/1,
     autogit/1,
+    semver/1,
     rebar_state/1,
     nextver/1,
     set_default_nextver/2,
@@ -44,6 +45,8 @@ build_dir(#relflow_st{rebar_state = State}) -> rebar_dir:base_dir(State).
 upfrom(State) -> parg(upfrom, State).
 
 autogit(State) -> parg(autogit, State) == true.
+
+semver(State) -> parg(semver, State) == true.
 
 profile(State) -> lists:last(filename:split(build_dir(State))).
 
