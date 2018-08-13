@@ -56,9 +56,7 @@ appver_at_revision(Rev, Name, DirType) ->
         apps_dir ->
             fmt("git show ~s:apps/~s/src/~s.app.src", [Rev, Name, Name]);
         single_src_dir ->
-            fmt("git show ~s:src/~s.app.src", [Rev, Name]);
-        X ->
-                  throw({unhandled_dirtpe, X})
+            fmt("git show ~s:src/~s.app.src", [Rev, Name])
     end,
     Str = os:cmd(Cmd),
     {application, Name, AppOpts} = eval(Str),
